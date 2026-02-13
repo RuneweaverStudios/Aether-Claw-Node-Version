@@ -18,6 +18,16 @@ NC='\033[0m'
 INSTALL_DIR="${HOME}/.aether-claw-node"
 REPO_URL="https://github.com/RuneweaverStudios/Aether-Claw-Node-Version.git"
 BRANCH="main"
+INSTALLER_RAW="https://raw.githubusercontent.com/RuneweaverStudios/Aether-Claw-Node-Version/main/install.sh"
+
+# If this script is running from inside the install dir, re-run with latest from GitHub so options menu is always current
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+if [ -d "$INSTALL_DIR" ] && [ "$SCRIPT_DIR" = "$(cd "$INSTALL_DIR" && pwd)" ] && command -v curl &>/dev/null; then
+    LATEST="$(curl -sSL "$INSTALLER_RAW" 2>/dev/null)" || true
+    if [ -n "$LATEST" ] && printf '%s' "$LATEST" | grep -q 'Aether-Claw Node Installer'; then
+        exec bash -c "$LATEST" -- "$@"
+    fi
+fi
 
 while [[ $# -gt 0 ]]; do
     case $1 in
