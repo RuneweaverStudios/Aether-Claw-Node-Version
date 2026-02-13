@@ -226,7 +226,7 @@ def cmd_onboard(args):
     env_file = Path(__file__).parent / '.env'
 
     # Step 1: API Key Setup
-    print("\n[1/6] 🔑 API Key Configuration")
+    print("\n[1/7] 🔑 API Key Configuration")
     print("-" * 50)
 
     # Check for existing key
@@ -285,7 +285,7 @@ def cmd_onboard(args):
             print("  ⚠ No API key provided - some features will be limited")
 
     # Step 2: Model Selection
-    print("\n[2/6] 🧠 Model Selection")
+    print("\n[2/7] 🧠 Model Selection")
     print("-" * 50)
     print("  PREMIUM REASONING:")
     print("  [1] Claude 3.7 Sonnet    $3/$15/M  - Best overall")
@@ -368,7 +368,7 @@ def cmd_onboard(args):
         print("  ✓ Model configuration saved")
 
     # Step 3: RSA Keys
-    print("\n[3/6] 🔐 Cryptographic Keys")
+    print("\n[3/7] 🔐 Cryptographic Keys")
     print("-" * 50)
 
     from keygen import KeyManager
@@ -388,7 +388,7 @@ def cmd_onboard(args):
             print(f"  ✗ Error: {e}")
 
     # Step 4: Gateway Daemon
-    print("\n[4/6] 🚪 Gateway Daemon")
+    print("\n[4/7] 🚪 Gateway Daemon")
     print("-" * 50)
     print("  The gateway daemon runs heartbeat tasks in the background:")
     print("  • Memory index updates")
@@ -519,7 +519,7 @@ def cmd_onboard(args):
             print(f"    Run: launchctl load {plist_path}")
 
     # Step 5: Index Brain
-    print("\n[5/6] 🧠 Memory Indexing")
+    print("\n[5/7] 🧠 Memory Indexing")
     print("-" * 50)
 
     from brain_index import BrainIndexer
@@ -532,7 +532,7 @@ def cmd_onboard(args):
         print(f"  ✗ Error: {e}")
 
     # Step 6: Skills Check
-    print("\n[6/6] 🔧 Skills Verification")
+    print("\n[6/7] 🔧 Skills Verification")
     print("-" * 50)
 
     from safe_skill_creator import SafeSkillCreator
@@ -547,6 +547,20 @@ def cmd_onboard(args):
             print("  ℹ No skills yet - create with: aetherclaw sign-skill")
     except Exception as e:
         print(f"  ⚠ {e}")
+
+    # Step 7: Telegram Setup
+    try:
+        from telegram_setup import setup_telegram
+        setup_telegram(env_file)
+    except ImportError:
+        print("\n[7/7] 📱 Telegram Bot Setup")
+        print("-" * 50)
+        print("  ℹ Telegram setup module not available")
+        print("  ℹ Set up manually: aetherclaw telegram --help")
+    except Exception as e:
+        print("\n[7/7] 📱 Telegram Bot Setup")
+        print("-" * 50)
+        print(f"  ⚠ Error: {e}")
 
     # Final Summary
     print()
