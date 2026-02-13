@@ -91,8 +91,44 @@ printf "${GREEN}✓${NC} Running npm install...\n"
 npm install --silent
 
 printf "\n${GREEN}✓ Installation complete.${NC}\n\n"
-printf "  ${CYAN}Quick start:${NC}\n"
-printf "    cd $INSTALL_DIR\n"
-printf "    node src/cli.js onboard   # first-time setup\n"
-printf "    node src/cli.js tui       # chat\n\n"
-printf "  Or add to PATH and run: ${CYAN}aetherclaw-node tui${NC}\n\n"
+
+# Interactive prompt
+printf "${CYAN}╔════════════════════════════════════════════════════╗${NC}\n"
+printf "${CYAN}║${NC}              ${YELLOW}Ready to get started?${NC}                  ${CYAN}║${NC}\n"
+printf "${CYAN}╚════════════════════════════════════════════════════╝${NC}\n\n"
+
+printf "  ${CYAN}[1]${NC} Run onboarding (first-time setup)\n"
+printf "  ${CYAN}[2]${NC} Launch TUI (chat interface)\n"
+printf "  ${CYAN}[3]${NC} Exit (run manually later)\n\n"
+
+# Read from /dev/tty if stdin is piped
+if [ -t 0 ]; then
+    read -p "  Choose [1-3] (default: 1): " choice
+else
+    read -p "  Choose [1-3] (default: 1): " choice < /dev/tty
+fi
+
+choice=${choice:-1}
+
+cd "$INSTALL_DIR"
+
+case "$choice" in
+    1)
+        printf "\n${CYAN}Running onboarding...${NC}\n\n"
+        node src/cli.js onboard
+        ;;
+    2)
+        printf "\n${CYAN}Launching TUI...${NC}\n\n"
+        node src/cli.js tui
+        ;;
+    3)
+        printf "\n${YELLOW}Exiting. Run manually:${NC}\n"
+        printf "  cd $INSTALL_DIR\n"
+        printf "  node src/cli.js onboard   # first-time setup\n"
+        printf "  node src/cli.js tui       # chat\n\n"
+        ;;
+    *)
+        printf "\n${YELLOW}Invalid choice. Exiting.${NC}\n"
+        printf "  Run: ${CYAN}cd $INSTALL_DIR && node src/cli.js onboard${NC}\n\n"
+        ;;
+esac
