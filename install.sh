@@ -162,10 +162,20 @@ if [ -d "$INSTALL_DIR" ]; then
                     grep -v "TELEGRAM_BOT_TOKEN" "$INSTALL_DIR/.env" 2>/dev/null | grep -v "TELEGRAM_CHAT_ID" > "$INSTALL_DIR/.env.tmp" 2>/dev/null || true
                     [ -f "$INSTALL_DIR/.env.tmp" ] && mv "$INSTALL_DIR/.env.tmp" "$INSTALL_DIR/.env"
                 fi
-                printf "  Telegram configuration removed\n"
-                printf "\n${CYAN}Starting Telegram onboarding (connect a new bot)...${NC}\n\n"
-                cd "$INSTALL_DIR"
-                node src/cli.js telegram-setup < /dev/tty
+                printf "  Telegram configuration removed\n\n"
+                if [ -t 0 ]; then
+                    read -p "  Do you want to add a new Telegram bot? [y/N]: " tg_choice
+                else
+                    read -p "  Do you want to add a new Telegram bot? [y/N]: " tg_choice < /dev/tty
+                fi
+                tg_choice=${tg_choice:-n}
+                if [ "$tg_choice" = "y" ] || [ "$tg_choice" = "Y" ]; then
+                    printf "\n${CYAN}Starting Telegram onboarding...${NC}\n\n"
+                    cd "$INSTALL_DIR"
+                    node src/cli.js telegram-setup < /dev/tty
+                else
+                    printf "  Run later: ${CYAN}cd $INSTALL_DIR && node src/cli.js telegram-setup${NC}\n\n"
+                fi
                 exit 0
                 ;;
             6)
