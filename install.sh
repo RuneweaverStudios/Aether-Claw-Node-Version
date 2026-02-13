@@ -287,7 +287,6 @@ if [ -d "$INSTALL_DIR" ]; then
                     [ -f "$INSTALL_DIR/.env.tmp" ] && mv "$INSTALL_DIR/.env.tmp" "$INSTALL_DIR/.env"
                 fi
                 printf "  Telegram configuration removed\n\n"
-                gateway_prompt
                 if [ -t 0 ]; then
                     read -p "  Do you want to add a new Telegram bot? [y/N]: " tg_choice
                 else
@@ -304,6 +303,7 @@ if [ -d "$INSTALL_DIR" ]; then
                 else
                     printf "  Run later: ${CYAN}cd $INSTALL_DIR && node src/cli.js telegram-setup${NC}\n\n"
                 fi
+                gateway_prompt
                 exit 0
                 ;;
             6)
