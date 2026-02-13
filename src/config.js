@@ -17,7 +17,9 @@ const DEFAULT_CONFIG = {
     }
   },
   brain: { directory: 'brain' },
-  safety_gate: { enabled: true }
+  safety_gate: { enabled: true },
+  heartbeat: { interval_minutes: 30 },
+  cron: { jobs: [] }
 };
 
 function loadConfig(configPath) {

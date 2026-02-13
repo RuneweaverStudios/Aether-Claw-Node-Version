@@ -57,21 +57,25 @@ So “bot config” = **`.env`** (who you are on OpenRouter + Telegram) + **`swa
   - Automatically as a subprocess of the **gateway daemon** (when installed via install.sh).
 - **Web dashboard** – `node src/cli.js dashboard` (Node HTTP server; status + simple UI).
 
-### 2. **Onboarding & setup**
+### 2. **Coding tasks (OpenClaw-style)**
+
+For **action**-classified messages, the agent runs with **tools**: exec, process, read_file, write_file, memory_search. The model can run commands, read/write files, and search memory; results are fed back until a final reply. See `docs/OPENCLAW_TOOLS_AND_WORKFLOWS.md` for the full OpenClaw tool list. Exec and file tools respect the kill switch and safety gate.
+
+### 3. **Onboarding & setup**
 
 - **Onboard** – `node src/cli.js onboard`  
   First-time setup: OpenRouter API key (masked), model choice (reasoning + action), brain dir creation, optional Telegram pairing, then hatch (TUI / Web / Exit).
 - **Telegram-only** – `node src/cli.js telegram-setup`  
   (Re)connect Telegram (token + pairing code); writes `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` to `.env`.
 
-### 3. **Brain & personality**
+### 4. **Brain & personality**
 
 - **Brain** – `brain/` (user.md, soul.md, memory.md, etc.). Personality module (`src/personality.js`) updates **user.md** and **soul.md** from first-run questions (name, agent name, vibe).
 - **Memory** – Free-form text in `brain/memory.md` (and optionally other files). Indexed into `brain/brain_index.json` for semantic-style search.
 - **Index** – `node src/cli.js index [file]`  
   (Re)index brain files for memory search. Run after editing memory.
 
-### 4. **TUI slash commands & gateway**
+### 5. **TUI slash commands & gateway**
 
 - **/status** – Config summary, index file count, skills list, brain path.  
 - **/memory &lt;query&gt;** – Search brain index and show snippets.  
@@ -81,7 +85,7 @@ So “bot config” = **`.env`** (who you are on OpenRouter + Telegram) + **`swa
 - **/help** – List commands.  
 - **Any other input** – Sent through the **gateway** (chat / action / memory / reflect) and answered with the appropriate model and system prompt.
 
-### 5. **Gateway daemon (persistence + background work)**
+### 6. **Gateway daemon (persistence + background work)**
 
 - **What it is**: One long-lived **Node** process (`node src/daemon.js`) managed by the macOS LaunchAgent. **No Python required.**
 - **What it runs**:
@@ -89,12 +93,12 @@ So “bot config” = **`.env`** (who you are on OpenRouter + Telegram) + **`swa
   - **Telegram bot** – Same process polls Telegram and replies via OpenRouter when `TELEGRAM_BOT_TOKEN` is set in `.env`.
 - **Access**: Same install directory, same `.env` and `swarm_config.json`, same `brain/`. So the bot and heartbeat have the same config and “abilities” as the TUI (OpenRouter + brain), running in the background.
 
-### 6. **Skills**
+### 7. **Skills**
 
 - **Location** – `skills/` directory.  
 - **Usage** – TUI can list skills (`/skills`). Heartbeat runs **skill integrity check** (signatures / hashes). The Node version does not execute arbitrary skill code from the TUI; skills are for listing and integrity.
 
-### 7. **Access and security**
+### 8. **Access and security**
 
 - **Network**: OpenRouter API (HTTPS), Telegram API (HTTPS). No other outbound services required for core Node flows.
 - **Filesystem**: Read/write to install directory (brain, index, config, .env). No system-wide or arbitrary path access by default.

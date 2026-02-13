@@ -8,6 +8,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const chalk = require('chalk');
 const { loadConfig } = require('./config');
 const { callLLM } = require('./api');
+const { runAgentLoop } = require('./agent-loop');
 const { indexAll, getBrainDir, searchMemory, readIndex, indexFile } = require('./brain');
 const { routePrompt } = require('./gateway');
 const { isFirstRun, updateUserProfile, updateSoul } = require('./personality');
@@ -307,7 +308,7 @@ async function cmdTui() {
   const ask = (prompt) => new Promise((res) => rl.question(prompt, res));
 
   const CHAT_SYSTEM = `You are Aether-Claw, a secure AI assistant with memory and skills. Be helpful and concise.`;
-  const ACTION_SYSTEM = `You are an expert programmer. Generate clean, well-documented code or run quick tasks. Output runnable code or clear steps.`;
+  const ACTION_SYSTEM = `You are an expert programmer with access to tools: exec (run shell commands in the project), process (manage background exec sessions), read_file, write_file, memory_search. Use these tools to run commands, read and write files, and search memory. Prefer running code and editing files via tools rather than only showing code in chat.`;
   const REFLECT_SYSTEM = `You are Aether-Claw. Help the user plan, break down problems, and think through options. Be structured and clear.`;
 
   while (true) {
@@ -387,10 +388,17 @@ async function cmdTui() {
     const label = action === 'action' ? chalk.dim(' [action]') : action === 'memory' ? chalk.dim(' [memory]') : action === 'reflect' ? chalk.dim(' [plan]') : '';
     console.log(chalk.dim('Thinking...') + label);
     try {
-      const reply = await callLLM(
-        { prompt: query, systemPrompt, tier, max_tokens: 4096 },
-        config
-      );
+      let reply;
+      if (action === 'action') {
+        const result = await runAgentLoop(ROOT, query, systemPrompt, config, { tier: 'action', max_tokens: 4096 });
+        reply = result.error ? result.error : result.reply;
+        if (result.toolCallsCount) console.log(chalk.dim('  (used ' + result.toolCallsCount + ' tool calls)\n'));
+      } else {
+        reply = await callLLM(
+          { prompt: query, systemPrompt, tier, max_tokens: 4096 },
+          config
+        );
+      }
       console.log(chalk.green('\nAether-Claw:\n') + reply + '\n');
     } catch (e) {
       console.log(chalk.red('Error: ') + (e.message || e) + '\n');

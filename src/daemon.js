@@ -17,7 +17,16 @@ const { sendTelegramMessage } = require('./telegram-setup');
 
 const ROOT = path.resolve(__dirname, '..');
 const TELEGRAM_API = 'https://api.telegram.org/bot';
-const HEARTBEAT_INTERVAL_MS = 30 * 60 * 1000; // 30 min
+
+function getHeartbeatIntervalMs() {
+  try {
+    const config = loadConfig(path.join(ROOT, 'swarm_config.json'));
+    const min = config.heartbeat?.interval_minutes ?? 30;
+    return Math.max(1, min) * 60 * 1000;
+  } catch (e) {
+    return 30 * 60 * 1000;
+  }
+}
 
 function log(msg) {
   const ts = new Date().toISOString();
@@ -91,10 +100,11 @@ async function runTelegramLoop() {
 }
 
 async function main() {
-  log('Gateway daemon starting (Node)');
+  const intervalMs = getHeartbeatIntervalMs();
+  log('Gateway daemon starting (Node), heartbeat every ' + (intervalMs / 60000) + ' min');
 
   runHeartbeatTasks();
-  setInterval(runHeartbeatTasks, HEARTBEAT_INTERVAL_MS);
+  setInterval(runHeartbeatTasks, intervalMs);
 
   if (process.env.TELEGRAM_BOT_TOKEN) {
     log('Telegram bot enabled');
