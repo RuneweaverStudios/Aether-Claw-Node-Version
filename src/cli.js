@@ -11,8 +11,11 @@ const { callLLM } = require('./api');
 const { indexAll, getBrainDir, searchMemory, readIndex, indexFile } = require('./brain');
 const { routePrompt } = require('./gateway');
 const { isFirstRun, updateUserProfile, updateSoul } = require('./personality');
+const { setupTelegram, sendTelegramMessage } = require('./telegram-setup');
+const axios = require('axios');
 
 const ROOT = path.resolve(__dirname, '..');
+const TELEGRAM_API = 'https://api.telegram.org/bot';
 
 function ttyQuestion(prompt, defaultVal = '') {
   return new Promise((resolve) => {
@@ -76,7 +79,7 @@ async function cmdOnboard() {
 
   let key = process.env.OPENROUTER_API_KEY;
   if (!key) {
-    console.log('  [1/4] 🔑 API Key');
+    console.log('  [1/5] 🔑 API Key');
     console.log('  Get your key at: https://openrouter.ai/keys');
     console.log('  (input is hidden; press Enter when done)\n');
     key = await ttyQuestionMasked('  Enter OpenRouter API key: ');
@@ -98,11 +101,11 @@ async function cmdOnboard() {
       console.log('  ✓ API key saved to .env\n');
     }
   } else {
-    console.log('  [1/4] 🔑 API Key: found in environment\n');
+    console.log('  [1/5] 🔑 API Key: found in environment\n');
   }
 
-  // [2/4] Model selection
-  console.log('  [2/4] 🧠 Model selection');
+  // [2/5] Model selection
+  console.log('  [2/5] 🧠 Model selection');
   console.log('  ' + '─'.repeat(50));
   console.log('  PREMIUM REASONING:');
   console.log('  [1] Claude 3.7 Sonnet    $3/$15/M  - Best overall');
@@ -173,7 +176,7 @@ async function cmdOnboard() {
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
   console.log('  ✓ Model config saved to swarm_config.json\n');
 
-  console.log('  [3/4] 🧠 Brain');
+  console.log('  [3/5] 🧠 Brain');
   const brainDir = getBrainDir(ROOT);
   if (!fs.existsSync(path.join(brainDir, 'soul.md'))) {
     fs.writeFileSync(path.join(brainDir, 'soul.md'), '# Soul\n\nAgent identity and goals.\n', 'utf8');
@@ -184,8 +187,50 @@ async function cmdOnboard() {
   const indexResults = indexAll(ROOT);
   console.log('  ✓ Indexed ' + Object.keys(indexResults).length + ' brain files\n');
 
-  console.log('  [4/4] ✅ Onboarding complete.');
-  console.log('\n  Run: ' + chalk.cyan('npm run tui') + ' or ' + chalk.cyan('node src/cli.js tui') + '\n');
+  // [4/5] Telegram
+  try {
+    await setupTelegram(path.join(ROOT, '.env'), {
+      question: ttyQuestion,
+      questionMasked: ttyQuestionMasked
+    });
+  } catch (e) {
+    console.log('  ⚠ Telegram setup skipped: ' + (e.message || e) + '\n');
+  }
+
+  console.log('  [5/5] ✅ Onboarding complete.\n');
+  console.log('  ' + chalk.cyan('Ready to hatch!') + '\n');
+  console.log('  [1] Hatch into TUI (terminal chat)');
+  console.log('  [2] Hatch into Web UI (browser dashboard)');
+  console.log('  [3] Exit (run manually later)\n');
+  const hatch = (await ttyQuestion('  Choose [1-3] (default: 1)', '1')).trim();
+  if (hatch === '2') {
+    console.log('\n  🐣 Launching Web UI...\n');
+    const { spawn } = require('child_process');
+    const dashPath = path.join(ROOT, 'dashboard.py');
+    const py = process.platform === 'win32' ? 'python' : 'python3';
+    const child = spawn(py, ['-m', 'streamlit', 'run', dashPath, '--server.headless', 'true'], {
+      cwd: ROOT,
+      stdio: 'inherit'
+    });
+    child.on('error', (err) => {
+      console.log('  Could not start Web UI:', err.message);
+      console.log('  Install Python and run: ' + py + ' -m pip install streamlit');
+      console.log('  Then: ' + py + ' -m streamlit run dashboard.py\n');
+    });
+    await new Promise((res) => child.on('close', res));
+  } else if (hatch !== '3') {
+    console.log('\n  🐣 Hatching into TUI...\n');
+    await cmdTui();
+  } else {
+    console.log('\n  Run later:');
+    console.log('    ' + chalk.cyan('node src/cli.js tui') + '       # Terminal chat');
+    console.log('    ' + chalk.cyan(pyCmd()) + '   # Web dashboard\n');
+  }
+}
+
+function pyCmd() {
+  const py = process.platform === 'win32' ? 'python' : 'python3';
+  return py + ' -m streamlit run dashboard.py';
 }
 
 function cmdStatus() {
@@ -365,6 +410,50 @@ async function cmdTui() {
   }
 }
 
+async function cmdTelegram() {
+  require('dotenv').config({ path: path.join(ROOT, '.env') });
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) {
+    console.log('Error: TELEGRAM_BOT_TOKEN not set. Run onboard to set up Telegram.');
+    process.exit(1);
+  }
+  const config = loadConfig(path.join(ROOT, 'swarm_config.json'));
+  const model = config.model_routing?.tier_1_reasoning?.model || 'anthropic/claude-3.7-sonnet';
+  const systemPrompt = 'You are Aether-Claw, a secure AI assistant. Be helpful and concise.';
+  console.log('Telegram bot running. Press Ctrl+C to stop.\n');
+  let offset = 0;
+  while (true) {
+    try {
+      const url = offset ? `${TELEGRAM_API}${token}/getUpdates?offset=${offset}` : `${TELEGRAM_API}${token}/getUpdates`;
+      const { data } = await axios.get(url, { timeout: 25000 });
+      if (data.ok && Array.isArray(data.result)) {
+        for (const update of data.result) {
+          offset = update.update_id + 1;
+          const msg = update.message;
+          if (!msg || !msg.text) continue;
+          const chatId = msg.chat.id;
+          const text = msg.text;
+          const fromName = (msg.from && msg.from.first_name) || 'User';
+          console.log('[' + chatId + '] ' + fromName + ': ' + text);
+          try {
+            const reply = await callLLM(
+              { prompt: text, systemPrompt, model, max_tokens: 4096 },
+              config
+            );
+            const out = (reply || '').slice(0, 4000);
+            await sendTelegramMessage(token, String(chatId), out);
+          } catch (e) {
+            await sendTelegramMessage(token, String(chatId), 'Error: ' + (e.message || e));
+          }
+        }
+      }
+    } catch (e) {
+      if (e.code !== 'ECONNABORTED') console.error(e.message || e);
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+}
+
 async function main() {
   const cmd = process.argv[2] || '';
 
@@ -384,12 +473,17 @@ async function main() {
     await cmdTui();
     return;
   }
+  if (cmd === 'telegram') {
+    await cmdTelegram();
+    return;
+  }
 
   console.log('Aether-Claw (Node)');
   console.log('  node src/cli.js onboard   - first-time setup');
   console.log('  node src/cli.js tui       - chat TUI (gateway routing)');
+  console.log('  node src/cli.js telegram - start Telegram bot');
   console.log('  node src/cli.js status   - status');
-  console.log('  node src/cli.js index    - index brain files (optional: --file <path>)');
+  console.log('  node src/cli.js index    - index brain files (optional: <file>)');
 }
 
 main().catch((e) => {
