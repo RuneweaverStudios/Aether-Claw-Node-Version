@@ -7,6 +7,7 @@ const path = require('path');
 const { logAction } = require('./audit-logger');
 
 const LEVELS = { info: 'info', warning: 'warning', error: 'error', success: 'success' };
+const stats = { total_sent: 0, successful: 0, failed: 0 };
 
 function _logToAudit(action, details, level = 'INFO', rootDir) {
   try {
@@ -17,7 +18,6 @@ function _logToAudit(action, details, level = 'INFO', rootDir) {
 }
 
 function send(title, message, level = 'info', timeout = 10, rootDir = null) {
-  const stats = { total_sent: 0, successful: 0, failed: 0 };
   stats.total_sent += 1;
   console.log(`[${(level || 'info').toUpperCase()}] ${title}: ${message}`);
   _logToAudit('NOTIFICATION', `${title}: ${message}`, 'INFO', rootDir);
@@ -31,6 +31,10 @@ function send(title, message, level = 'info', timeout = 10, rootDir = null) {
     stats.failed += 1;
     return true; // we still "succeeded" by logging
   }
+}
+
+function getStats() {
+  return { ...stats };
 }
 
 function sendHeartbeatStatus(taskName, status, message, rootDir = null) {

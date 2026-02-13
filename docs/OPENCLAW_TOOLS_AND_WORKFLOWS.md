@@ -149,6 +149,39 @@ Canonical list of **built-in tools** and **tool groups** in OpenClaw (from [docs
 
 ---
 
+## Aether-Claw extras (beyond OpenClaw)
+
+These tools are available in Aether-Claw and are not part of OpenClaw's built-in set. They make the agent more capable for memory, ops, git, and dev workflows.
+
+| Tool | Purpose |
+|------|---------|
+| **memory_append** | Append text to a brain file (e.g. memory.md) so the agent can "remember this for later". Gated by MEMORY_MODIFICATION. |
+| **memory_index** | Reindex brain so new content is searchable (call after memory_append to use new notes in memory_search). |
+| **skills_list** | List installed skills with name and signature_valid. |
+| **doctor** | Run health checks (config, env, daemon, skills); returns checks with ok, message, fix. |
+| **notify** | Send a desktop/system notification (title + message). Gated by NOTIFICATION. |
+| **datetime** | Current date, time, timezone (ISO + locale). |
+| **list_dir** | List directory contents (names + isFile). Safer than exec ls. |
+| **file_exists** | Check if path exists and type (file, dir, none). |
+| **kill_switch_status** | Read-only: armed, triggered. |
+| **audit_tail** | Read last N entries from brain/audit_log.md. Gated by AUDIT_READ. |
+| **git_status** | Short git status (branch, clean/dirty). |
+| **git_diff** | Git diff, optionally for a path. |
+| **git_log** | Last N commits (oneline). |
+| **git_commit** | Stage and commit with message. Gated by GIT_OPERATIONS. |
+| **http_request** | Generic HTTP (GET/POST/PUT/DELETE) with optional headers and body. |
+| **json_read** | Read JSON file and optional key path (e.g. config.model_routing). |
+| **json_write** | Write JSON file; optionally merge at key path. |
+| **glob_search** | Find files matching a glob (e.g. **/*.md). |
+| **env_get** | Read a safe env var (allowlist: NODE_ENV, LANG, etc.; never secrets). |
+| **run_tests** | Run npm test and return pass/fail summary. |
+| **lint** | Run eslint and return errors. |
+| **skill_invoke** | Stub (not implemented); skills_list available. |
+
+Safety: NOTIFICATION, AUDIT_READ, GIT_OPERATIONS, MEMORY_MODIFICATION are in the safety gate; tools respect kill switch where applicable.
+
+---
+
 ## References
 
 - [OpenClaw Tools](https://docs.openclaw.ai/tools)

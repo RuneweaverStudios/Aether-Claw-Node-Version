@@ -7,11 +7,14 @@ const path = require('path');
 const fs = require('fs');
 const { execSync, spawn } = require('child_process');
 const axios = require('axios');
-const { searchMemory, readIndex } = require('../brain');
+const { searchMemory, readIndex, getBrainDir, indexAll } = require('../brain');
 const { getKillSwitch } = require('../kill-switch');
 const { checkPermission, ActionCategory } = require('../safety-gate');
 const { loadConfig } = require('../config');
 const { sendTelegramMessage } = require('../telegram-setup');
+const { listSkills } = require('../safe-skill-creator');
+const { runChecks } = require('../doctor');
+const { send: notifySend } = require('../notifier');
 
 const ROOT_DEFAULT = path.resolve(__dirname, '..', '..');
 
@@ -377,7 +380,29 @@ const TOOL_DEFINITIONS = [
         required: []
       }
     }
-  }
+  },
+  { type: 'function', function: { name: 'skills_list', description: 'List installed skills with name and signature validity.', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'doctor', description: 'Run health checks (config, env, daemon, skills). Returns checks with ok, message, fix.', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'notify', description: 'Send a desktop/system notification (title and message).', parameters: { type: 'object', properties: { title: { type: 'string' }, message: { type: 'string' } }, required: ['title', 'message'] } } },
+  { type: 'function', function: { name: 'datetime', description: 'Get current date, time, and timezone.', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'list_dir', description: 'List directory contents (names and whether file or dir). Path relative to project root.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Directory path relative to project root (default .)' } }, required: [] } } },
+  { type: 'function', function: { name: 'file_exists', description: 'Check if path exists and type (file, dir, or none).', parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } } },
+  { type: 'function', function: { name: 'kill_switch_status', description: 'Read-only kill switch status: armed, triggered.', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'memory_append', description: 'Append text to a brain file (e.g. memory.md) so the agent can remember.', parameters: { type: 'object', properties: { file: { type: 'string', description: 'Brain file name (default memory.md)' }, content: { type: 'string' } }, required: ['content'] } } },
+  { type: 'function', function: { name: 'memory_index', description: 'Reindex brain so new content is searchable.', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'audit_tail', description: 'Read last N entries from the audit log.', parameters: { type: 'object', properties: { limit: { type: 'number', description: 'Max entries (default 20)' } } } } },
+  { type: 'function', function: { name: 'git_status', description: 'Short git status (branch, clean/dirty).', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'git_diff', description: 'Git diff, optionally for a path.', parameters: { type: 'object', properties: { path: { type: 'string' } } } } },
+  { type: 'function', function: { name: 'git_log', description: 'Last N commits (oneline).', parameters: { type: 'object', properties: { n: { type: 'number', description: 'Number of commits (default 10)' } } } } },
+  { type: 'function', function: { name: 'git_commit', description: 'Stage and commit with message.', parameters: { type: 'object', properties: { message: { type: 'string' }, paths: { type: 'array', items: { type: 'string' }, description: 'Optional paths to add (default all)' } }, required: ['message'] } } },
+  { type: 'function', function: { name: 'http_request', description: 'Generic HTTP request (GET/POST/PUT/DELETE) with optional headers and body.', parameters: { type: 'object', properties: { url: { type: 'string' }, method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] }, headers: { type: 'object' }, body: { type: 'string' } }, required: ['url'] } } },
+  { type: 'function', function: { name: 'json_read', description: 'Read JSON file and optionally a key path (e.g. config.model_routing).', parameters: { type: 'object', properties: { path: { type: 'string' }, key_path: { type: 'string' } }, required: ['path'] } } },
+  { type: 'function', function: { name: 'json_write', description: 'Write JSON file; optionally merge at key path.', parameters: { type: 'object', properties: { path: { type: 'string' }, value: { type: 'object' }, key_path: { type: 'string', description: 'Optional dot path to merge into' } }, required: ['path', 'value'] } } },
+  { type: 'function', function: { name: 'glob_search', description: 'Find files matching a glob pattern (e.g. **/*.md).', parameters: { type: 'object', properties: { pattern: { type: 'string' } }, required: ['pattern'] } } },
+  { type: 'function', function: { name: 'env_get', description: 'Read a safe env var (allowlist: NODE_ENV, LANG, etc.; never secrets).', parameters: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'] } } },
+  { type: 'function', function: { name: 'run_tests', description: 'Run tests (npm test) and return pass/fail summary.', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'lint', description: 'Run linter (eslint) and return errors.', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'skill_invoke', description: 'Run a signed skill by name with optional params. Stub: not implemented.', parameters: { type: 'object', properties: { skill_name: { type: 'string' }, params: { type: 'object' } }, required: ['skill_name'] } } }
 ];
 
 function resolvePath(workspaceRoot, relativePath) {
@@ -803,6 +828,303 @@ async function runImage(workspaceRoot, args, context) {
   }
 }
 
+function runSkillsList(workspaceRoot) {
+  const skills = listSkills(path.join(workspaceRoot || ROOT_DEFAULT, 'skills'));
+  return { skills: skills.map((s) => ({ name: s.name, signature_valid: s.signature_valid })) };
+}
+
+function runDoctor(workspaceRoot) {
+  const results = runChecks();
+  const has_failures = results.some((r) => !r.ok);
+  return { checks: results, has_failures };
+}
+
+function runNotify(workspaceRoot, args, context) {
+  if (context.killSwitch && context.killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
+  const perm = checkPermission(ActionCategory.NOTIFICATION, null, workspaceRoot);
+  if (!perm.allowed) return { error: 'Permission denied: notification' };
+  try {
+    notifySend(args.title || 'Aether-Claw', args.message || '', 'info', 10, workspaceRoot || ROOT_DEFAULT);
+    return { sent: true };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+function runDatetime() {
+  const d = new Date();
+  return {
+    iso: d.toISOString(),
+    timezone_offset: d.getTimezoneOffset(),
+    locale_string: d.toLocaleString()
+  };
+}
+
+function runListDir(workspaceRoot, args) {
+  const root = workspaceRoot || ROOT_DEFAULT;
+  const dirPath = args.path ? resolvePath(root, args.path) : root;
+  try {
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    return { entries: entries.map((e) => ({ name: e.name, isFile: e.isFile() })) };
+  } catch (e) {
+    return { error: e.code === 'ENOENT' ? 'Directory not found' : e.message };
+  }
+}
+
+function runFileExists(workspaceRoot, args) {
+  const root = workspaceRoot || ROOT_DEFAULT;
+  try {
+    const fp = resolvePath(root, args.path);
+    if (!fs.existsSync(fp)) return { exists: false, type: 'none' };
+    const stat = fs.statSync(fp);
+    return { exists: true, type: stat.isFile() ? 'file' : stat.isDirectory() ? 'dir' : 'other' };
+  } catch (e) {
+    return { exists: false, type: 'none', error: e.message };
+  }
+}
+
+function runKillSwitchStatus(workspaceRoot) {
+  const ks = getKillSwitch(workspaceRoot || ROOT_DEFAULT);
+  return { armed: ks.isArmed(), triggered: ks.isTriggered() };
+}
+
+function runMemoryAppend(workspaceRoot, args, context) {
+  const { killSwitch } = context || {};
+  if (killSwitch && killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
+  const perm = checkPermission(ActionCategory.MEMORY_MODIFICATION, null, workspaceRoot);
+  if (!perm.allowed) return { error: 'Permission denied: memory_modification' };
+  const root = workspaceRoot || ROOT_DEFAULT;
+  const brainDir = getBrainDir(root);
+  const file = (args.file || 'memory.md').replace(/\.\./g, '');
+  const fp = path.join(brainDir, file.endsWith('.md') ? file : file + '.md');
+  if (!path.resolve(fp).startsWith(path.resolve(brainDir))) return { error: 'Invalid brain file' };
+  try {
+    const existing = fs.existsSync(fp) ? fs.readFileSync(fp, 'utf8') : '';
+    const sep = existing.endsWith('\n') ? '' : '\n';
+    fs.writeFileSync(fp, existing + sep + args.content + '\n', 'utf8');
+    return { appended: true, file: path.basename(fp) };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+function runMemoryIndex(workspaceRoot, context) {
+  const { killSwitch } = context || {};
+  if (killSwitch && killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
+  const perm = checkPermission(ActionCategory.FILE_READ, null, workspaceRoot);
+  if (!perm.allowed) return { error: 'Permission denied: file_read' };
+  try {
+    const results = indexAll(workspaceRoot || ROOT_DEFAULT);
+    return { indexed: Object.keys(results), count: Object.keys(results).length };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+function runAuditTail(workspaceRoot, args, context) {
+  if (context.killSwitch && context.killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
+  const perm = checkPermission(ActionCategory.AUDIT_READ, null, workspaceRoot);
+  if (!perm.allowed) return { error: 'Permission denied: audit_read' };
+  const root = workspaceRoot || ROOT_DEFAULT;
+  const auditPath = path.join(root, 'brain', 'audit_log.md');
+  try {
+    if (!fs.existsSync(auditPath)) return { entries: [] };
+    const raw = fs.readFileSync(auditPath, 'utf8');
+    const limit = Math.min(50, args.limit || 20);
+    const blocks = raw.split(/\n### /).filter((b) => b.trim());
+    const entries = blocks.slice(-limit).map((b) => b.slice(0, 500));
+    return { entries };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+function runGitStatus(workspaceRoot) {
+  const root = workspaceRoot || ROOT_DEFAULT;
+  try {
+    const out = execSync('git', ['status', '-sb'], { cwd: root, encoding: 'utf8', timeout: 5000 });
+    return { status: out.trim() };
+  } catch (e) {
+    return { error: e.message || 'Not a git repo' };
+  }
+}
+
+function runGitDiff(workspaceRoot, args) {
+  const root = workspaceRoot || ROOT_DEFAULT;
+  try {
+    const argv = ['diff'];
+    if (args.path) argv.push('--', args.path);
+    const out = execSync('git', argv, { cwd: root, encoding: 'utf8', timeout: 10000, maxBuffer: 1024 * 1024 });
+    return { diff: out.slice(0, 15000), truncated: out.length > 15000 };
+  } catch (e) {
+    return { error: e.message || 'Git diff failed' };
+  }
+}
+
+function runGitLog(workspaceRoot, args) {
+  const root = workspaceRoot || ROOT_DEFAULT;
+  const n = Math.min(50, args.n || 10);
+  try {
+    const out = execSync('git', ['log', '-n', String(n), '--oneline'], { cwd: root, encoding: 'utf8', timeout: 5000 });
+    return { log: out.trim().split('\n') };
+  } catch (e) {
+    return { error: e.message || 'Not a git repo' };
+  }
+}
+
+function runGitCommit(workspaceRoot, args, context) {
+  const { killSwitch } = context || {};
+  if (killSwitch && killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
+  const perm = checkPermission(ActionCategory.GIT_OPERATIONS, null, workspaceRoot);
+  if (!perm.allowed) return { error: 'Permission denied: git_operations' };
+  const root = workspaceRoot || ROOT_DEFAULT;
+  try {
+    if (args.paths && args.paths.length) {
+      execSync('git', ['add', ...args.paths], { cwd: root, encoding: 'utf8' });
+    } else {
+      execSync('git', ['add', '-A'], { cwd: root, encoding: 'utf8' });
+    }
+    execSync('git', ['commit', '-m', args.message], { cwd: root, encoding: 'utf8' });
+    return { committed: true };
+  } catch (e) {
+    return { error: e.message || 'Git commit failed' };
+  }
+}
+
+async function runHttpRequest(args) {
+  const method = (args.method || 'GET').toUpperCase();
+  const maxBody = 100000;
+  try {
+    const config = { method, timeout: 20000, responseType: 'text', maxContentLength: maxBody + 10000 };
+    if (args.headers && Object.keys(args.headers).length) config.headers = args.headers;
+    if (args.body && ['POST', 'PUT', 'PATCH'].includes(method)) config.data = args.body;
+    const { data, status } = await axios(args.url, config);
+    const text = typeof data === 'string' ? data : JSON.stringify(data);
+    return { status, body: text.slice(0, maxBody), truncated: text.length > maxBody };
+  } catch (e) {
+    return { error: e.response ? `${e.response.status}: ${e.message}` : e.message };
+  }
+}
+
+function runJsonRead(workspaceRoot, args, context) {
+  if (context.killSwitch && context.killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
+  const perm = checkPermission(ActionCategory.FILE_READ, null, workspaceRoot);
+  if (!perm.allowed) return { error: 'Permission denied: file_read' };
+  try {
+    const fp = resolvePath(workspaceRoot || ROOT_DEFAULT, args.path);
+    const raw = fs.readFileSync(fp, 'utf8');
+    let value = JSON.parse(raw);
+    if (args.key_path) {
+      for (const k of args.key_path.split('.')) value = value?.[k];
+    }
+    return { value };
+  } catch (e) {
+    return { error: e.code === 'ENOENT' ? 'File not found' : e.message };
+  }
+}
+
+function runJsonWrite(workspaceRoot, args, context) {
+  const { killSwitch } = context || {};
+  if (killSwitch && killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
+  const perm = checkPermission(ActionCategory.FILE_WRITE, null, workspaceRoot);
+  if (!perm.allowed) return { error: 'Permission denied: file_write' };
+  try {
+    const fp = resolvePath(workspaceRoot || ROOT_DEFAULT, args.path);
+    if (args.key_path) {
+      let current = {};
+      if (fs.existsSync(fp)) current = JSON.parse(fs.readFileSync(fp, 'utf8'));
+      const keys = args.key_path.split('.');
+      let target = current;
+      for (let i = 0; i < keys.length - 1; i++) {
+        const k = keys[i];
+        if (!(k in target) || typeof target[k] !== 'object') target[k] = {};
+        target = target[k];
+      }
+      target[keys[keys.length - 1]] = args.value;
+      fs.writeFileSync(fp, JSON.stringify(current, null, 2), 'utf8');
+    } else {
+      fs.mkdirSync(path.dirname(fp), { recursive: true });
+      fs.writeFileSync(fp, JSON.stringify(args.value, null, 2), 'utf8');
+    }
+    return { written: true, path: args.path };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+function runGlobSearch(workspaceRoot, args) {
+  const root = workspaceRoot || ROOT_DEFAULT;
+  const pattern = args.pattern || '**/*';
+  const parts = pattern.split('*').filter(Boolean);
+  const results = [];
+  function walk(dir, depth) {
+    if (depth > 20) return;
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const e of entries) {
+        const rel = path.relative(root, path.join(dir, e.name));
+        const match = simpleGlobMatch(rel, pattern);
+        if (e.isFile() && match) results.push(rel);
+        if (e.isDirectory() && !e.name.startsWith('.')) walk(path.join(dir, e.name), depth + 1);
+      }
+    } catch (err) {}
+  }
+  walk(root, 0);
+  return { files: results.slice(0, 200) };
+}
+
+function simpleGlobMatch(filePath, pattern) {
+  const re = new RegExp('^' + pattern.replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*').replace(/\./g, '\\.') + '$');
+  return re.test(filePath);
+}
+
+const ENV_ALLOWLIST = ['NODE_ENV', 'LANG', 'LC_ALL', 'TZ', 'PWD', 'USER', 'HOME', 'EDITOR', 'SHELL'];
+
+function runEnvGet(args) {
+  const key = args.key || '';
+  if (!ENV_ALLOWLIST.includes(key)) return { error: 'Key not in allowlist (safe vars only)' };
+  const value = process.env[key];
+  return { key, value: value != null ? value : null, set: value != null };
+}
+
+function runRunTests(workspaceRoot) {
+  const root = workspaceRoot || ROOT_DEFAULT;
+  try {
+    const out = execSync('npm', ['test'], { cwd: root, encoding: 'utf8', timeout: 120000, maxBuffer: 2 * 1024 * 1024 });
+    const str = out.slice(-8000);
+    const passed = /(\d+) passing/.exec(str);
+    const failed = /(\d+) failing/.exec(str);
+    return {
+      passed: passed ? parseInt(passed[1], 10) : (out.includes('pass') ? 1 : 0),
+      failed: failed ? parseInt(failed[1], 10) : 0,
+      output_summary: str.slice(-2000)
+    };
+  } catch (e) {
+    return { error: e.message, output_summary: (e.stdout || e.stderr || '').slice(-2000) };
+  }
+}
+
+function runLint(workspaceRoot) {
+  const root = workspaceRoot || ROOT_DEFAULT;
+  try {
+    const out = execSync('npx', ['eslint', '.', '--format', 'compact'], { cwd: root, encoding: 'utf8', timeout: 60000, maxBuffer: 1024 * 1024 });
+    const lines = out.trim().split('\n').filter((l) => l.includes(':'));
+    const errors = lines.slice(0, 50).map((l) => {
+      const m = l.match(/^(.+): line (\d+), col \d+, (.+)$/);
+      return m ? { file: m[1], line: parseInt(m[2], 10), message: m[3] } : { raw: l };
+    });
+    return { errors };
+  } catch (e) {
+    const out = (e.stdout || e.stderr || '').trim();
+    const lines = out.split('\n').filter((l) => l.includes(':'));
+    return { errors: lines.slice(0, 50).map((l) => ({ raw: l })), error: e.message };
+  }
+}
+
+function runSkillInvokeStub() {
+  return { error: 'skill_invoke not implemented; skills list available via skills_list.' };
+}
+
 /**
  * Execute a single tool by name with parsed arguments. Async for network/Telegram/vision tools.
  * @param {string} workspaceRoot - Project root path
@@ -864,6 +1186,50 @@ async function runTool(workspaceRoot, toolName, args, context = {}) {
       return runAgentsList();
     case 'image':
       return await runImage(root, args, ctx);
+    case 'skills_list':
+      return runSkillsList(root);
+    case 'doctor':
+      return runDoctor(root);
+    case 'notify':
+      return runNotify(root, args, ctx);
+    case 'datetime':
+      return runDatetime();
+    case 'list_dir':
+      return runListDir(root, args);
+    case 'file_exists':
+      return runFileExists(root, args);
+    case 'kill_switch_status':
+      return runKillSwitchStatus(root);
+    case 'memory_append':
+      return runMemoryAppend(root, args, ctx);
+    case 'memory_index':
+      return runMemoryIndex(root, ctx);
+    case 'audit_tail':
+      return runAuditTail(root, args, ctx);
+    case 'git_status':
+      return runGitStatus(root);
+    case 'git_diff':
+      return runGitDiff(root, args);
+    case 'git_log':
+      return runGitLog(root, args);
+    case 'git_commit':
+      return runGitCommit(root, args, ctx);
+    case 'http_request':
+      return await runHttpRequest(args);
+    case 'json_read':
+      return runJsonRead(root, args, ctx);
+    case 'json_write':
+      return runJsonWrite(root, args, ctx);
+    case 'glob_search':
+      return runGlobSearch(root, args);
+    case 'env_get':
+      return runEnvGet(args);
+    case 'run_tests':
+      return runRunTests(root);
+    case 'lint':
+      return runLint(root);
+    case 'skill_invoke':
+      return runSkillInvokeStub();
     default:
       return { error: 'Unknown tool: ' + toolName };
   }

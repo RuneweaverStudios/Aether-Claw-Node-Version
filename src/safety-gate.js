@@ -16,7 +16,9 @@ const ActionCategory = {
   SKILL_LOADING: 'skill_loading',
   GIT_OPERATIONS: 'git_operations',
   MEMORY_MODIFICATION: 'memory_modification',
-  CONFIG_CHANGE: 'config_change'
+  CONFIG_CHANGE: 'config_change',
+  NOTIFICATION: 'notification',
+  AUDIT_READ: 'audit_read'
 };
 
 function requiresConfirmation(rootDir, category) {
