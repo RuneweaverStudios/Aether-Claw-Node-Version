@@ -1,6 +1,6 @@
 # OpenClaw Tools and Workflows Reference
 
-Canonical list of **built-in tools** and **tool groups** in OpenClaw (from [docs.openclaw.ai/tools](https://docs.openclaw.ai/tools)), plus recommended workflows. Aether-Claw aligns coding behavior with OpenClaw by implementing a subset of these (exec, process, read, write, memory_search) and the same agent-loop pattern.
+Canonical list of **built-in tools** and **tool groups** in OpenClaw (from [docs.openclaw.ai/tools](https://docs.openclaw.ai/tools)), plus recommended workflows. Aether-Claw implements the full tool set (24 tools; browser, canvas, nodes, sessions_send, sessions_spawn are stubs) and the same agent-loop pattern.
 
 ---
 

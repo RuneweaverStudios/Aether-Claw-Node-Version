@@ -14,7 +14,7 @@
 
 So **persistence** = the OS (LaunchAgent) keeps the gateway process alive and restarts it. The “gateway daemon” is that one Node process; it runs:
 
-1. **Heartbeat loop** – every 30 min, indexes brain files (memory index update).  
+1. **Heartbeat loop** – interval from `swarm_config.json` (`heartbeat.interval_minutes`, default 30); indexes brain files (memory index update), git scan, skill check.  
 2. **Telegram bot** – same process polls Telegram and replies via OpenRouter when `TELEGRAM_BOT_TOKEN` is set.
 
 Both run inside a single Node process; no Python or subprocesses.
@@ -28,7 +28,7 @@ Both run inside a single Node process; no Python or subprocesses.
 | File | Purpose |
 |------|--------|
 | **`.env`** | Secrets only (not committed). `OPENROUTER_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`. |
-| **`swarm_config.json`** | Model routing, safety, brain path. Committed. |
+| **`swarm_config.json`** | Model routing, safety, brain path, heartbeat (interval_minutes), cron.jobs. Committed. |
 
 ### Bot / model routing
 
@@ -55,11 +55,11 @@ So “bot config” = **`.env`** (who you are on OpenRouter + Telegram) + **`swa
 - **Telegram** – Bot runs either:
   - Manually: `node src/cli.js telegram`, or  
   - Automatically as a subprocess of the **gateway daemon** (when installed via install.sh).
-- **Web dashboard** – `node src/cli.js dashboard` (Node HTTP server; status + simple UI).
+- **Web dashboard** – `node src/cli.js dashboard` (Node HTTP server; Chat, Status, Config tabs; markdown + code blocks; POST `/api/chat`).
 
 ### 2. **Coding tasks (OpenClaw-style)**
 
-For **action**-classified messages, the agent runs with **tools**: exec, process, read_file, write_file, memory_search. The model can run commands, read/write files, and search memory; results are fed back until a final reply. See `docs/OPENCLAW_TOOLS_AND_WORKFLOWS.md` for the full OpenClaw tool list. Exec and file tools respect the kill switch and safety gate.
+For **action**-classified messages, the agent runs an **agent loop** with **24 tools**: exec, bash, process, read_file, write_file, edit, apply_patch, memory_search, memory_get, web_search, web_fetch, message (Telegram), cron, gateway, sessions_list/history/status, agents_list, image (vision); browser/canvas/nodes/sessions_send/sessions_spawn are stubs. Results are fed back until a final reply. See `docs/OPENCLAW_TOOLS_AND_WORKFLOWS.md`. Exec and file tools respect the kill switch and safety gate.
 
 ### 3. **Onboarding & setup**
 
@@ -89,7 +89,7 @@ For **action**-classified messages, the agent runs with **tools**: exec, process
 
 - **What it is**: One long-lived **Node** process (`node src/daemon.js`) managed by the macOS LaunchAgent. **No Python required.**
 - **What it runs**:
-  - **Heartbeat loop** – Every 30 min, runs memory index update (indexes `brain/*.md` into `brain_index.json`).
+  - **Heartbeat loop** – Interval from config (`heartbeat.interval_minutes`, default 30). Runs memory index update (indexes `brain/*.md` into `brain_index.json`), git scan, skill check.
   - **Telegram bot** – Same process polls Telegram and replies via OpenRouter when `TELEGRAM_BOT_TOKEN` is set in `.env`.
 - **Access**: Same install directory, same `.env` and `swarm_config.json`, same `brain/`. So the bot and heartbeat have the same config and “abilities” as the TUI (OpenRouter + brain), running in the background.
 
@@ -103,7 +103,7 @@ For **action**-classified messages, the agent runs with **tools**: exec, process
 - **Network**: OpenRouter API (HTTPS), Telegram API (HTTPS). No other outbound services required for core Node flows.
 - **Filesystem**: Read/write to install directory (brain, index, config, .env). No system-wide or arbitrary path access by default.
 - **Secrets**: Only in `.env`; not committed. API key input is masked during onboarding.
-- **Safety**: `swarm_config.json` can include `safety_gate.enabled`; the Node TUI doesn’t execute user-requested code or shell commands, it only routes to LLMs and local file ops (index, memory search).
+- **Safety**: `swarm_config.json` can include `safety_gate.enabled`. For **action** messages, the agent loop can run tools (exec, read_file, write_file, etc.); exec and file tools are gated by the kill switch and safety gate (e.g. `SYSTEM_COMMAND`, `FILE_READ`, `FILE_WRITE`). Optional env: `BRAVE_API_KEY` for web_search; Telegram tools use `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`.
 
 ---
 
@@ -111,7 +111,7 @@ For **action**-classified messages, the agent runs with **tools**: exec, process
 
 - **Persistence** = gateway daemon = LaunchAgent running `node src/daemon.js`, which runs the heartbeat loop and (when configured) the Telegram bot in the same process.
 - **Bot config** = `.env` (OpenRouter + Telegram) + `swarm_config.json` (model tiers, optional fallback). Telegram “is on” when token (and pairing) is set; it runs either manually or via the daemon.
-- **Features** = TUI (gateway-routed chat, memory, index, slash commands, /new, /reset), Telegram (same LLM + config), onboarding/personality, brain/memory/index, web dashboard, doctor (health check), model failover, and background heartbeat + Telegram when the gateway daemon is installed.
+- **Features** = TUI (gateway-routed chat, memory, index, slash commands, /new, /reset; action path uses agent loop with tools), Telegram (same LLM + config), onboarding/personality, brain/memory/index, web dashboard (Chat + Status + Config, markdown + code blocks), doctor (health check), model failover, cron (config-based jobs), configurable heartbeat, and background heartbeat + Telegram when the gateway daemon is installed.
 
 ---
 
@@ -131,8 +131,8 @@ For **action**-classified messages, the agent runs with **tools**: exec, process
 | **Model failover** | Auth rotation + fallbacks | ✅ Optional `fallback` in swarm_config per tier (429/5xx retry) |
 | **Brain / personality** | AGENTS.md, SOUL.md, USER, workspace | ✅ brain/soul.md, user.md, memory.md, personality setup |
 | **Skills** | Workspace skills, ClawHub | ✅ Signed skills in `skills/`, integrity check in heartbeat |
-| **Scheduled tasks** | Cron, webhooks | ✅ Heartbeat (index, git scan, skill check) every 30 min |
-| **Web dashboard** | Control UI + WebChat | ✅ Simple status dashboard (Node HTTP) |
+| **Scheduled tasks** | Cron, webhooks | ✅ Heartbeat (configurable interval); cron tool (list/add/remove/run in swarm_config.json) |
+| **Web dashboard** | Control UI + WebChat | ✅ Chat + Status + Config (Node HTTP, markdown + code blocks) |
 | **Safety** | Safety gate, sandbox for groups | ✅ safety-gate.js, kill-switch.js, audit-logger.js |
 | **Multi-channel** | WhatsApp, Slack, Discord, etc. | Telegram only (extensible) |
 | **Voice / Canvas / Nodes** | Voice Wake, A2UI, iOS/Android nodes | ❌ Not in scope (Node CLI/TUI + Telegram) |

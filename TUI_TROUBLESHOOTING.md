@@ -1,76 +1,41 @@
-# TUI Troubleshooting Guide
+# TUI Troubleshooting (Node)
 
-## Issue
-TUI exits immediately after showing the prompt with "Goodbye!" message.
+The TUI is the Node chat interface: `node src/cli.js tui`.
 
-## Root Cause
-The TUI is getting EOFError when trying to read from stdin, likely because:
-1. stdin is not a TTY (piped or redirected)
-2. stdin is closed/exhausted
-3. Rich Prompt.ask() doesn't handle /dev/tty properly
+## TUI exits right away or says "Goodbye!"
 
-## Tests to Run
+**Cause**: stdin is not a proper TTY (e.g. piped, or launched from an environment that doesn’t attach stdin).
 
-### Test 1: Check stdin status
-```bash
-python3 test_tui_input.py
-```
+**What to do**:
 
-This will show:
-- Whether stdin is a TTY
-- Whether /dev/tty is accessible
-- Which input method works
+1. Run in a normal terminal (not via an IDE “Run” that might not attach stdin):
+   ```bash
+   node src/cli.js tui
+   ```
+2. Don’t pipe stdin:
+   ```bash
+   # Wrong:
+   echo "" | node src/cli.js tui
 
-### Test 2: Direct TUI launch
-```bash
-python3 tui.py
-```
+   # Right:
+   node src/cli.js tui
+   ```
+3. Check if stdin is a TTY:
+   ```bash
+   node -e "console.log(process.stdin.isTTY)"
+   ```
+   If it prints `undefined` or `false`, you’re not in an interactive terminal.
 
-If this works, the issue is with how onboarding launches the TUI.
+## Commands not working
 
-### Test 3: Test with piped stdin (simulate onboarding)
-```bash
-echo "" | python3 tui.py
-```
+- **/status, /memory, /skills, /index**: Require project files (e.g. `swarm_config.json`, `brain/`, `skills/`). Run from the project root: `cd /path/to/newclawnode && node src/cli.js tui`.
+- **Action/coding**: Needs `OPENROUTER_API_KEY` in `.env`. Action path uses the agent loop with tools; if the model returns tool calls, they are executed (exec, read_file, etc.) and results are fed back.
 
-This simulates what happens when stdin is piped.
+## Node version
 
-### Test 4: Test subprocess launch
-```bash
-python3 -c "import subprocess; import sys; subprocess.run(['python3', 'tui.py'], stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr)"
-```
+Use Node 18 or newer: `node --version`.
 
-## Solutions Implemented
+## More info
 
-1. **safe_input() function**: Always uses /dev/tty for interactive input
-2. **stdin detection**: Checks if stdin is a TTY and reconnects if needed
-3. **Better error handling**: Shows specific error messages instead of just "Goodbye!"
-
-## Debugging Steps
-
-1. Run `test_tui_input.py` to see which input methods work
-2. Check if `/dev/tty` is accessible: `test -r /dev/tty && echo "OK" || echo "FAIL"`
-3. Try launching TUI directly: `python3 tui.py`
-4. Check if issue is with subprocess: See Test 4 above
-
-## Expected Behavior
-
-After fixes:
-- TUI should detect non-TTY stdin
-- TUI should automatically use /dev/tty for input
-- TUI should show helpful error messages if input fails
-- TUI should not exit immediately
-
-## If Still Failing
-
-Check:
-1. Terminal emulator compatibility
-2. SSH session (if remote)
-3. Shell configuration (zsh/bash)
-4. Python version (needs 3.11+)
-5. Rich library version
-
-Run with debug output:
-```bash
-python3 -u tui.py 2>&1 | tee tui_debug.log
-```
+- Architecture and features: `docs/ARCHITECTURE_AND_FEATURES.md`
+- Tools and workflows: `docs/OPENCLAW_TOOLS_AND_WORKFLOWS.md`
