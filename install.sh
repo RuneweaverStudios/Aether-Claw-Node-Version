@@ -183,8 +183,8 @@ if [ -d "$INSTALL_DIR" ]; then
                 fi
                 start_choice=${start_choice:-2}
                 case "$start_choice" in
-                    1) node src/cli.js onboard ;;
-                    2) node src/cli.js tui ;;
+                    1) node src/cli.js onboard < /dev/tty ;;
+                    2) node src/cli.js tui < /dev/tty ;;
                     *) printf "  Run: ${CYAN}cd $INSTALL_DIR && node src/cli.js tui${NC}\n\n" ;;
                 esac
                 exit 0
@@ -254,11 +254,11 @@ cd "$INSTALL_DIR"
 case "$choice" in
     1)
         printf "\n${CYAN}Running onboarding...${NC}\n\n"
-        node src/cli.js onboard
+        node src/cli.js onboard < /dev/tty
         ;;
     2)
         printf "\n${CYAN}Launching TUI...${NC}\n\n"
-        node src/cli.js tui
+        node src/cli.js tui < /dev/tty
         ;;
     3)
         printf "\n${YELLOW}Exiting. Run manually:${NC}\n"
