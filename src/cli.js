@@ -412,10 +412,11 @@ async function cmdTui() {
 
 async function cmdTelegramSetup() {
   const envPath = path.join(ROOT, '.env');
+  const skipPrompt = process.argv.includes('--yes') || process.argv.includes('-y');
   await setupTelegram(envPath, {
     question: ttyQuestion,
     questionMasked: ttyQuestionMasked
-  });
+  }, { skipConnectPrompt: skipPrompt });
 }
 
 async function cmdTelegram() {

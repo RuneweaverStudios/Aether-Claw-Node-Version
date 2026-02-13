@@ -175,7 +175,7 @@ if [ -d "$INSTALL_DIR" ]; then
                     if [ -d "$INSTALL_DIR/.git" ] && command -v git &>/dev/null; then
                         git pull --quiet 2>/dev/null || true
                     fi
-                    node src/cli.js telegram-setup < /dev/tty
+                    node src/cli.js telegram-setup --yes < /dev/tty
                 else
                     printf "  Run later: ${CYAN}cd $INSTALL_DIR && node src/cli.js telegram-setup${NC}\n\n"
                 fi
