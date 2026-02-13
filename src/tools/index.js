@@ -402,7 +402,10 @@ const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'env_get', description: 'Read a safe env var (allowlist: NODE_ENV, LANG, etc.; never secrets).', parameters: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'] } } },
   { type: 'function', function: { name: 'run_tests', description: 'Run tests (npm test) and return pass/fail summary.', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'lint', description: 'Run linter (eslint) and return errors.', parameters: { type: 'object', properties: {} } } },
-  { type: 'function', function: { name: 'skill_invoke', description: 'Run a signed skill by name with optional params. Stub: not implemented.', parameters: { type: 'object', properties: { skill_name: { type: 'string' }, params: { type: 'object' } }, required: ['skill_name'] } } }
+  { type: 'function', function: { name: 'skill_invoke', description: 'Run a signed skill by name with optional params. Stub: not implemented.', parameters: { type: 'object', properties: { skill_name: { type: 'string' }, params: { type: 'object' } }, required: ['skill_name'] } } },
+  { type: 'function', function: { name: 'ralph_get_next_story', description: 'Get the next Ralph story to implement. Reads prd.json and returns the highest-priority user story where passes is false, plus the Codebase Patterns section from progress.txt. Use this instead of manually reading prd.json when running the Ralph workflow.', parameters: { type: 'object', properties: { prd_path: { type: 'string', description: 'Path to prd.json relative to workspace (default prd.json)' }, progress_path: { type: 'string', description: 'Path to progress.txt (default progress.txt)' } } } } },
+  { type: 'function', function: { name: 'ralph_mark_story_passed', description: 'Mark a user story as passed in the PRD. Sets passes to true for the given story id. Use after successfully implementing a story and passing quality checks.', parameters: { type: 'object', properties: { story_id: { type: 'string', description: 'User story id (e.g. US-001)' }, prd_path: { type: 'string', description: 'Path to prd.json (default prd.json)' } }, required: ['story_id'] } } },
+  { type: 'function', function: { name: 'ralph_append_progress', description: 'Append a progress entry to progress.txt. Use after completing a story to record what was done and learnings for future iterations. Content is appended with a timestamp and separator.', parameters: { type: 'object', properties: { content: { type: 'string', description: 'Progress text (implementation summary and learnings)' }, progress_path: { type: 'string', description: 'Path to progress.txt (default progress.txt)' } }, required: ['content'] } } }
 ];
 
 function resolvePath(workspaceRoot, relativePath) {
@@ -1125,6 +1128,75 @@ function runSkillInvokeStub() {
   return { error: 'skill_invoke not implemented; skills list available via skills_list.' };
 }
 
+function runRalphGetNextStory(workspaceRoot, args) {
+  const root = workspaceRoot || ROOT_DEFAULT;
+  const prdPath = args.prd_path || 'prd.json';
+  const progressPath = args.progress_path || 'progress.txt';
+  try {
+    const prdFp = path.isAbsolute(prdPath) ? prdPath : path.join(root, prdPath);
+    if (!fs.existsSync(prdFp)) return { error: 'prd.json not found at ' + prdPath };
+    const prd = JSON.parse(fs.readFileSync(prdFp, 'utf8'));
+    const stories = prd.userStories || [];
+    const next = stories
+      .filter((s) => s.passes === false)
+      .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999))[0];
+    let codebasePatterns = '';
+    const progressFp = path.isAbsolute(progressPath) ? progressPath : path.join(root, progressPath);
+    if (fs.existsSync(progressFp)) {
+      const content = fs.readFileSync(progressFp, 'utf8');
+      const match = content.match(/## Codebase Patterns[\s\S]*?(?=## |$)/i);
+      if (match) codebasePatterns = match[0].trim();
+    }
+    if (!next) {
+      return { all_complete: true, message: 'All user stories have passes: true.', codebasePatterns: codebasePatterns || '(none)' };
+    }
+    return { story: next, codebasePatterns: codebasePatterns || '(none)', branchName: prd.branchName, project: prd.project };
+  } catch (e) {
+    return { error: e.message || 'ralph_get_next_story failed' };
+  }
+}
+
+function runRalphMarkStoryPassed(workspaceRoot, args, context) {
+  const root = workspaceRoot || ROOT_DEFAULT;
+  if (context.killSwitch && context.killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
+  const perm = checkPermission(ActionCategory.FILE_WRITE, null, root);
+  if (!perm.allowed) return { error: 'Permission denied: file_write' };
+  const storyId = args.story_id;
+  const prdPath = args.prd_path || 'prd.json';
+  try {
+    const prdFp = path.isAbsolute(prdPath) ? prdPath : path.join(root, prdPath);
+    if (!fs.existsSync(prdFp)) return { error: 'prd.json not found at ' + prdPath };
+    const prd = JSON.parse(fs.readFileSync(prdFp, 'utf8'));
+    const stories = prd.userStories || [];
+    const idx = stories.findIndex((s) => s.id === storyId);
+    if (idx === -1) return { error: 'Story not found: ' + storyId };
+    stories[idx].passes = true;
+    prd.userStories = stories;
+    fs.writeFileSync(prdFp, JSON.stringify(prd, null, 2), 'utf8');
+    return { ok: true, story_id: storyId };
+  } catch (e) {
+    return { error: e.message || 'ralph_mark_story_passed failed' };
+  }
+}
+
+function runRalphAppendProgress(workspaceRoot, args, context) {
+  const root = workspaceRoot || ROOT_DEFAULT;
+  if (context.killSwitch && context.killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
+  const perm = checkPermission(ActionCategory.FILE_WRITE, null, root);
+  if (!perm.allowed) return { error: 'Permission denied: file_write' };
+  const content = args.content;
+  const progressPath = args.progress_path || 'progress.txt';
+  try {
+    const progressFp = path.isAbsolute(progressPath) ? progressPath : path.join(root, progressPath);
+    const timestamp = new Date().toISOString();
+    const block = `\n## ${timestamp}\n${content}\n---\n`;
+    fs.appendFileSync(progressFp, block, 'utf8');
+    return { ok: true, appended: true };
+  } catch (e) {
+    return { error: e.message || 'ralph_append_progress failed' };
+  }
+}
+
 /**
  * Execute a single tool by name with parsed arguments. Async for network/Telegram/vision tools.
  * @param {string} workspaceRoot - Project root path
@@ -1230,6 +1302,12 @@ async function runTool(workspaceRoot, toolName, args, context = {}) {
       return runLint(root);
     case 'skill_invoke':
       return runSkillInvokeStub();
+    case 'ralph_get_next_story':
+      return runRalphGetNextStory(root, args);
+    case 'ralph_mark_story_passed':
+      return runRalphMarkStoryPassed(root, args, ctx);
+    case 'ralph_append_progress':
+      return runRalphAppendProgress(root, args, ctx);
     default:
       return { error: 'Unknown tool: ' + toolName };
   }

@@ -1,0 +1,32 @@
+{
+  "project": "MyApp",
+  "branchName": "ralph/feature-name",
+  "description": "Short description of the feature or epic",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Add priority field to tasks",
+      "description": "As a developer, I need to store task priority so it persists.",
+      "acceptanceCriteria": [
+        "Add priority column: 'high' | 'medium' | 'low' (default 'medium')",
+        "Run migration successfully",
+        "Typecheck and tests pass"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Display priority on task cards",
+      "description": "As a user, I want to see task priority at a glance.",
+      "acceptanceCriteria": [
+        "Task cards show colored priority badge",
+        "Typecheck and tests pass"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

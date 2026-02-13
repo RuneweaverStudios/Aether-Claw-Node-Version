@@ -59,7 +59,13 @@ So “bot config” = **`.env`** (who you are on OpenRouter + Telegram) + **`swa
 
 ### 2. **Coding tasks (OpenClaw-style)**
 
-For **action**-classified messages, the agent runs an **agent loop** with **24 tools**: exec, bash, process, read_file, write_file, edit, apply_patch, memory_search, memory_get, web_search, web_fetch, message (Telegram), cron, gateway, sessions_list/history/status, agents_list, image (vision); browser/canvas/nodes/sessions_send/sessions_spawn are stubs. Results are fed back until a final reply. See `docs/OPENCLAW_TOOLS_AND_WORKFLOWS.md`. Exec and file tools respect the kill switch and safety gate.
+For **action**-classified messages, the agent runs an **agent loop** with **27+ tools**: exec, bash, process, read_file, write_file, edit, apply_patch, memory_search, memory_get, web_search, web_fetch, message (Telegram), cron, gateway, sessions_list/history/status, agents_list, image (vision); **ralph_get_next_story**, **ralph_mark_story_passed**, **ralph_append_progress** (Better Ralph workflow); plus extras (doctor, notify, git_*, json_read/write, run_tests, lint, etc.). browser/canvas/nodes/sessions_send/sessions_spawn are stubs. See `docs/OPENCLAW_TOOLS_AND_WORKFLOWS.md`. Exec and file tools respect the kill switch and safety gate.
+
+- **Code (plan-then-build)** – `node src/cli.js code [task]`  
+  Cursor-style workflow: a **planning agent** (reasoning model) produces a structured plan, then a **build agent** (action model + tools) implements it. Use `--plan-only` to only print the plan, or `--no-plan` to run build only.
+
+- **Ralph (PRD-driven autonomous loop)** – `node src/cli.js ralph [max_iterations]`  
+  Better Ralph: reads `prd.json`, runs one user story per iteration (get next story → implement → quality checks → commit → mark passed → append progress), until all stories have `passes: true` or max iterations. Uses dedicated tools: `ralph_get_next_story`, `ralph_mark_story_passed`, `ralph_append_progress`. Progress lives in `progress.txt`; optional archive on branch change. See `better-ralph/` and [Ralph](https://github.com/snarktank/ralph).
 
 ### 3. **Onboarding & setup**
 
@@ -111,7 +117,7 @@ For **action**-classified messages, the agent runs an **agent loop** with **24 t
 
 - **Persistence** = gateway daemon = LaunchAgent running `node src/daemon.js`, which runs the heartbeat loop and (when configured) the Telegram bot in the same process.
 - **Bot config** = `.env` (OpenRouter + Telegram) + `swarm_config.json` (model tiers, optional fallback). Telegram “is on” when token (and pairing) is set; it runs either manually or via the daemon.
-- **Features** = TUI (gateway-routed chat, memory, index, slash commands, /new, /reset; action path uses agent loop with tools), Telegram (same LLM + config), onboarding/personality, brain/memory/index, web dashboard (Chat + Status + Config, markdown + code blocks), doctor (health check), model failover, cron (config-based jobs), configurable heartbeat, and background heartbeat + Telegram when the gateway daemon is installed.
+- **Features** = TUI (gateway-routed chat, memory, index, slash commands, /new, /reset; action path uses agent loop with tools), Telegram (same LLM + config), onboarding/personality, brain/memory/index, web dashboard (Chat + Status + Config, markdown + code blocks), **code** (plan-then-build), **ralph** (PRD-driven autonomous loop with Better Ralph tools), doctor (health check), model failover, cron (config-based jobs), configurable heartbeat, and background heartbeat + Telegram when the gateway daemon is installed.
 
 ---
 

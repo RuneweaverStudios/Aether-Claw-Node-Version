@@ -19,6 +19,19 @@ const axios = require('axios');
 const ROOT = path.resolve(__dirname, '..');
 const TELEGRAM_API = 'https://api.telegram.org/bot';
 
+/** Read stdin to end (for piping: echo "task" | node src/cli.js code). */
+function readStdin() {
+  return new Promise((resolve) => {
+    const chunks = [];
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (chunk) => chunks.push(chunk));
+    process.stdin.on('end', () => resolve(chunks.join('').trim()));
+  });
+}
+
+const PLANNING_SYSTEM = `You are a coding task planner. Given a user request, produce a clear, ordered plan (numbered steps) only. Include: which files to create or edit, which commands to run, and any checks or tests to add. Output the plan in markdown. Do not write implementation code or code blocks—only the plan.`;
+const CODE_BUILD_SYSTEM = `You are an expert programmer with access to tools: exec (run shell commands in the project), process (manage background exec sessions), read_file, write_file, memory_search. Use these tools to run commands, read and write files, and search memory. Execute the following plan step by step using your tools. Do not only describe—make the edits and run commands as needed.`;
+
 function ttyQuestion(prompt, defaultVal = '') {
   return new Promise((resolve) => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -459,6 +472,118 @@ async function cmdTelegram() {
   }
 }
 
+/**
+ * Plan-then-build (Cursor-style) coding: planning agent then build agent.
+ * Usage: code [--plan-only] [--no-plan] [task]
+ * Task from argv, or TTY prompt, or stdin.
+ */
+async function cmdCode() {
+  const argv = process.argv.slice(2);
+  const planOnly = argv.includes('--plan-only');
+  const noPlan = argv.includes('--no-plan');
+  const rest = argv.filter((a) => a !== '--plan-only' && a !== '--no-plan');
+  let task = rest.length ? rest.join(' ').trim() : '';
+
+  if (!task) {
+    if (process.stdin.isTTY) {
+      task = (await ttyQuestion(chalk.cyan('Task (describe what to build or change): '))).trim();
+    } else {
+      task = await readStdin();
+    }
+  }
+  if (!task) {
+    console.log(chalk.red('Error: No task provided. Usage: node src/cli.js code [task] or pipe task via stdin.'));
+    process.exit(1);
+  }
+
+  const config = loadConfig(path.join(ROOT, 'swarm_config.json'));
+
+  let plan = '';
+  if (!noPlan) {
+    console.log(chalk.cyan('\nPhase 1: Planning\n') + '─'.repeat(40));
+    try {
+      plan = await callLLM(
+        { prompt: task, systemPrompt: PLANNING_SYSTEM, tier: 'reasoning', max_tokens: 2048 },
+        config
+      );
+      plan = (plan || '').trim();
+      console.log(plan + '\n');
+    } catch (e) {
+      console.error(chalk.red('Planning failed: ') + (e.message || e));
+      process.exit(1);
+    }
+    if (planOnly) {
+      console.log(chalk.dim('(Plan only; use without --plan-only to run build.)\n'));
+      return;
+    }
+  }
+
+  console.log(chalk.cyan('Phase 2: Build\n') + '─'.repeat(40));
+  const buildUserMessage = plan
+    ? `Task: ${task}\n\nPlan to execute:\n${plan}`
+    : task;
+  try {
+    const result = await runAgentLoop(ROOT, buildUserMessage, CODE_BUILD_SYSTEM, config, {
+      tier: 'action',
+      max_tokens: 4096
+    });
+    if (result.toolCallsCount) {
+      console.log(chalk.dim('(used ' + result.toolCallsCount + ' tool calls)\n'));
+    }
+    const reply = result.error ? result.error : result.reply;
+    console.log(chalk.green('Result:\n') + (reply || '(no reply)') + '\n');
+  } catch (e) {
+    console.error(chalk.red('Build failed: ') + (e.message || e));
+    process.exit(1);
+  }
+}
+
+/**
+ * Ralph: PRD-driven autonomous loop. Runs agent until all stories pass or max iterations.
+ * progress.txt is initialized if missing; archive on branch change.
+ */
+async function cmdRalph() {
+  const { runRalph } = require('./ralph');
+  const argv = process.argv.slice(2);
+  const args = argv.filter((a) => a !== 'ralph' && !a.startsWith('-'));
+  const maxIterations = parseInt(args[0], 10) || undefined;
+
+  console.log(chalk.cyan('\nRalph – PRD-driven autonomous loop\n') + '─'.repeat(50));
+
+  try {
+    const result = await runRalph(ROOT, {
+      maxIterations,
+      onIteration(i, max) {
+        console.log(chalk.blue('\n--- Ralph iteration ' + i + ' of ' + max + ' ---\n'));
+      },
+      onIterationDone(i, reply, runResult) {
+        if (runResult.toolCallsCount) {
+          console.log(chalk.dim('  (used ' + runResult.toolCallsCount + ' tool calls)'));
+        }
+      },
+      onArchive(archiveFolder) {
+        console.log(chalk.dim('Archived previous run to ' + archiveFolder + '\n'));
+      }
+    });
+
+    if (result.completed) {
+      if (result.iterations === 0 && result.message) {
+        console.log(chalk.green(result.message) + '\n');
+      } else {
+        console.log(chalk.green('\nRalph completed all tasks!') + ' (iterations: ' + result.iterations + ')\n');
+      }
+    } else {
+      console.log(chalk.yellow('\nRalph reached max iterations without completing all tasks.'));
+      if (result.error) console.log(chalk.red(result.error));
+      console.log('Check progress.txt and prd.json for status.\n');
+      process.exit(1);
+    }
+  } catch (e) {
+    console.error(chalk.red('Ralph failed: ') + (e.message || e));
+    process.exit(1);
+  }
+}
+
 async function main() {
   const cmd = process.argv[2] || '';
 
@@ -499,6 +624,14 @@ async function main() {
     cmdDoctor();
     return;
   }
+  if (cmd === 'code') {
+    await cmdCode();
+    return;
+  }
+  if (cmd === 'ralph') {
+    await cmdRalph();
+    return;
+  }
 
   console.log('Aether-Claw (Node)');
   console.log('  node src/cli.js onboard        - first-time setup');
@@ -508,6 +641,8 @@ async function main() {
   console.log('  node src/cli.js daemon         - gateway daemon (heartbeat + Telegram)');
   console.log('  node src/cli.js dashboard      - web dashboard (status)');
   console.log('  node src/cli.js doctor         - health check and suggestions');
+  console.log('  node src/cli.js code [task]   - plan then build (Cursor-style coding)');
+  console.log('  node src/cli.js ralph [N]     - PRD-driven autonomous loop (Ralph-style)');
   console.log('  node src/cli.js status        - status');
   console.log('  node src/cli.js index         - index brain files (optional: <file>)');
 }
