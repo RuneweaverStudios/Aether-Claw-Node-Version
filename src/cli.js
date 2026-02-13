@@ -13,11 +13,80 @@ const { indexAll, getBrainDir, searchMemory, readIndex, indexFile } = require('.
 const { routePrompt } = require('./gateway');
 const { isFirstRun, updateUserProfile, updateSoul } = require('./personality');
 const { setupTelegram, sendTelegramMessage } = require('./telegram-setup');
-const { listSkills: listSkillsFromLoader } = require('./safe-skill-creator');
+const { buildSystemPromptWithSkills, listAllSkillsWithAuditStatus, listEligibleSkills } = require('./openclaw-skills');
 const axios = require('axios');
 
 const ROOT = path.resolve(__dirname, '..');
 const TELEGRAM_API = 'https://api.telegram.org/bot';
+
+const ONBOARD_STEPS_TOTAL = 5;
+
+function renderProgress(step, total, label) {
+  const n = Math.min(step, total);
+  const barLen = 10;
+  const filled = Math.round((n / total) * barLen);
+  const bar = '[' + '='.repeat(filled) + '>'.repeat(filled < barLen ? 1 : 0) + ' '.repeat(barLen - filled - (filled < barLen ? 1 : 0)) + ']';
+  console.log('\n  ' + chalk.cyan(bar) + ' ' + chalk.dim(n + '/' + total) + '  ' + chalk.bold(label) + '\n');
+}
+
+/** Scripted first message from Aether-Claw when bootstrap is active (only this is scripted; rest is LLM-driven). */
+const BOOTSTRAP_FIRST_MESSAGE = `Hey! I just came online — fresh install, blank slate, the whole thing.
+
+So... who are you? And more importantly — who am I supposed to be?
+
+I need a name, a vibe, maybe an emoji. You tell me what works for you, or we can figure it out together. What do you want to call me?`;
+
+const BOOTSTRAP_MD_CONTENT = `# BOOTSTRAP - First-run ritual
+
+You just woke up. The user already saw your intro. Now continue the conversation.
+
+Figure out together:
+1. **Your name** — What should they call you?
+2. **Your nature** — What kind of creature are you? (AI assistant is fine, or something weirder)
+3. **Your vibe** — Formal? Casual? Snarky? Warm? What feels right?
+4. **Your emoji** — Everyone needs a signature.
+
+Update these files with what you learn:
+- \`brain/identity.md\` — your name, creature, vibe, emoji (create if missing)
+- \`brain/user.md\` — their name, what to call them, timezone, notes
+- \`brain/soul.md\` — what matters to them, how they want you to behave, boundaries
+
+When you are done, use the delete_file tool to remove \`brain/BOOTSTRAP.md\` so this ritual only runs once.
+`;
+
+const BOOTSTRAP_MAX_CHARS = 20000;
+
+function seedBootstrapIfNeeded(root) {
+  const brainDir = getBrainDir(root);
+  const bootstrapPath = path.join(brainDir, 'BOOTSTRAP.md');
+  if (fs.existsSync(bootstrapPath)) return;
+  fs.writeFileSync(bootstrapPath, BOOTSTRAP_MD_CONTENT, 'utf8');
+  console.log('  ✓ Created brain/BOOTSTRAP.md (first-run conversation)\n');
+}
+
+function getBootstrapContext(root) {
+  const brainDir = getBrainDir(root);
+  const files = [
+    { name: 'BOOTSTRAP.md', path: path.join(brainDir, 'BOOTSTRAP.md') },
+    { name: 'user.md', path: path.join(brainDir, 'user.md') },
+    { name: 'soul.md', path: path.join(brainDir, 'soul.md') },
+    { name: 'identity.md', path: path.join(brainDir, 'identity.md') }
+  ];
+  const parts = [];
+  const maxPerFile = Math.floor(BOOTSTRAP_MAX_CHARS / files.length);
+  for (const f of files) {
+    if (!fs.existsSync(f.path)) {
+      parts.push(`[missing: ${f.name}]\n`);
+      continue;
+    }
+    let content = fs.readFileSync(f.path, 'utf8');
+    if (content.length > maxPerFile) content = content.slice(0, maxPerFile) + '\n...[truncated]';
+    parts.push(`--- ${f.name} ---\n${content}\n`);
+  }
+  const combined = parts.join('\n');
+  if (!combined.trim()) return '';
+  return '\n\n## Bootstrap / project context\n\n' + combined;
+}
 
 /** Read stdin to end (for piping: echo "task" | node src/cli.js code). */
 function readStdin() {
@@ -92,6 +161,7 @@ async function cmdOnboard() {
   console.log('  ║              🥚 AETHERCLAW ONBOARDING 🥚             ║');
   console.log('  ╚════════════════════════════════════════════════════╝\n');
 
+  renderProgress(1, ONBOARD_STEPS_TOTAL, 'API Key');
   let key = process.env.OPENROUTER_API_KEY;
   if (!key) {
     console.log('  [1/5] 🔑 API Key');
@@ -119,6 +189,7 @@ async function cmdOnboard() {
     console.log('  [1/5] 🔑 API Key: found in environment\n');
   }
 
+  renderProgress(2, ONBOARD_STEPS_TOTAL, 'Model selection');
   // [2/5] Model selection
   console.log('  [2/5] 🧠 Model selection');
   console.log('  ' + '─'.repeat(50));
@@ -191,6 +262,7 @@ async function cmdOnboard() {
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
   console.log('  ✓ Model config saved to swarm_config.json\n');
 
+  renderProgress(3, ONBOARD_STEPS_TOTAL, 'Brain');
   console.log('  [3/5] 🧠 Brain');
   const brainDir = getBrainDir(ROOT);
   if (!fs.existsSync(path.join(brainDir, 'soul.md'))) {
@@ -199,9 +271,11 @@ async function cmdOnboard() {
     fs.writeFileSync(path.join(brainDir, 'memory.md'), '# Memory\n\nLong-term memory log.\n', 'utf8');
     console.log('  ✓ Created brain/soul.md, user.md, memory.md\n');
   }
+  seedBootstrapIfNeeded(ROOT);
   const indexResults = indexAll(ROOT);
   console.log('  ✓ Indexed ' + Object.keys(indexResults).length + ' brain files\n');
 
+  renderProgress(4, ONBOARD_STEPS_TOTAL, 'Telegram');
   // [4/5] Telegram
   try {
     await setupTelegram(path.join(ROOT, '.env'), {
@@ -212,6 +286,7 @@ async function cmdOnboard() {
     console.log('  ⚠ Telegram setup skipped: ' + (e.message || e) + '\n');
   }
 
+  renderProgress(5, ONBOARD_STEPS_TOTAL, 'Complete');
   console.log('  [5/5] ✅ Onboarding complete.\n');
   console.log('  ' + chalk.cyan('Ready to hatch!') + '\n');
   console.log('  [1] Hatch into TUI (terminal chat)');
@@ -252,23 +327,20 @@ function cmdStatus() {
   const config = loadConfig(path.join(ROOT, 'swarm_config.json'));
   const index = readIndex(ROOT);
   const fileCount = Object.keys(index.files || {}).length;
-  const skills = listSkills(ROOT);
+  const allSkills = listAllSkillsWithAuditStatus(ROOT);
+  const eligible = listEligibleSkills(ROOT);
   console.log(chalk.cyan('\nAether-Claw Status'));
   console.log('─'.repeat(50));
   console.log('Version: ', config.version);
   console.log('Brain:   ', path.join(ROOT, 'brain'));
   console.log('Indexed: ', fileCount, 'files');
-  console.log('Skills:  ', skills.length, 'found');
+  console.log('Skills:  ', allSkills.length, 'found (' + eligible.length + ' passed audit)');
   console.log('Safety:  ', config.safety_gate?.enabled ? 'ON' : 'OFF');
   const reasoning = config.model_routing?.tier_1_reasoning?.model;
   const action = config.model_routing?.tier_2_action?.model;
   if (reasoning) console.log('Reasoning:', reasoning);
   if (action) console.log('Action:   ', action);
   console.log('');
-}
-
-function listSkills(rootDir) {
-  return listSkillsFromLoader(path.join(rootDir, 'skills')).map((s) => ({ name: s.name, signed: s.signature_valid }));
 }
 
 async function runPersonalitySetup() {
@@ -313,7 +385,7 @@ async function cmdTui() {
   console.log('╚════════════════════════════════════════════════════╝\n');
 
   if (isFirstRun(ROOT)) {
-    await runPersonalitySetup();
+    console.log(chalk.cyan('Aether-Claw:\n') + BOOTSTRAP_FIRST_MESSAGE + '\n');
   }
   console.log('Type /help for commands, /quit to exit.\n');
 
@@ -357,11 +429,11 @@ async function cmdTui() {
       continue;
     }
     if (input === '/skills') {
-      const skills = listSkills(ROOT);
-      if (skills.length === 0) console.log('\n  No skills in skills/\n');
+      const skills = listAllSkillsWithAuditStatus(ROOT);
+      if (skills.length === 0) console.log('\n  No skills in skills/ (add SKILL.md subdirs or use clawhub install)\n');
       else {
         console.log('\n  Skills:');
-        skills.forEach((s) => console.log('    ' + (s.signed ? '✓' : '○') + ' ' + s.name));
+        skills.forEach((s) => console.log('    ' + (s.audit === 'passed' ? '✓' : '○') + ' ' + s.name + (s.audit === 'failed' ? ' (audit failed)' : '')));
         console.log('');
       }
       continue;
@@ -397,6 +469,8 @@ async function cmdTui() {
       systemPrompt = CHAT_SYSTEM + '\n\n' + memoryContext;
       tier = 'reasoning';
     }
+    systemPrompt = systemPrompt + getBootstrapContext(ROOT);
+    systemPrompt = buildSystemPromptWithSkills(systemPrompt, ROOT);
 
     const label = action === 'action' ? chalk.dim(' [action]') : action === 'memory' ? chalk.dim(' [memory]') : action === 'reflect' ? chalk.dim(' [plan]') : '';
     console.log(chalk.dim('Thinking...') + label);

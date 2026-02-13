@@ -70,13 +70,13 @@ For **action**-classified messages, the agent runs an **agent loop** with **27+ 
 ### 3. **Onboarding & setup**
 
 - **Onboard** – `node src/cli.js onboard`  
-  First-time setup: OpenRouter API key (masked), model choice (reasoning + action), brain dir creation, optional Telegram pairing, then hatch (TUI / Web / Exit).
+  First-time setup: OpenRouter API key (masked), model choice (reasoning + action), brain dir creation (including `BOOTSTRAP.md` for first-run conversation), optional Telegram pairing, then hatch (TUI / Web / Exit). Progress indicator shows current step (1–5).
 - **Telegram-only** – `node src/cli.js telegram-setup`  
   (Re)connect Telegram (token + pairing code); writes `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` to `.env`.
 
-### 4. **Brain & personality**
+### 4. **Brain & personality (conversational config)**
 
-- **Brain** – `brain/` (user.md, soul.md, memory.md, etc.). Personality module (`src/personality.js`) updates **user.md** and **soul.md** from first-run questions (name, agent name, vibe).
+- **Brain** – `brain/` (user.md, soul.md, memory.md, BOOTSTRAP.md, optional identity.md). First-run is **conversational** (OpenClaw-style): on first TUI open, a **scripted** first message from Aether-Claw is shown; then the LLM continues the conversation and uses tools (`write_file`, `delete_file`) to update brain files. When done, the agent deletes `brain/BOOTSTRAP.md`. Bootstrap files are injected into the system prompt each turn.
 - **Memory** – Free-form text in `brain/memory.md` (and optionally other files). Indexed into `brain/brain_index.json` for semantic-style search.
 - **Index** – `node src/cli.js index [file]`  
   (Re)index brain files for memory search. Run after editing memory.
@@ -95,14 +95,15 @@ For **action**-classified messages, the agent runs an **agent loop** with **27+ 
 
 - **What it is**: One long-lived **Node** process (`node src/daemon.js`) managed by the macOS LaunchAgent. **No Python required.**
 - **What it runs**:
-  - **Heartbeat loop** – Interval from config (`heartbeat.interval_minutes`, default 30). Runs memory index update (indexes `brain/*.md` into `brain_index.json`), git scan, skill check.
+  - **Heartbeat loop** – Interval from config (`heartbeat.interval_minutes`, default 30). Runs memory index update (indexes `brain/*.md` into `brain_index.json`), git scan, skill audit summary (logs when any skill failed audit).
   - **Telegram bot** – Same process polls Telegram and replies via OpenRouter when `TELEGRAM_BOT_TOKEN` is set in `.env`.
 - **Access**: Same install directory, same `.env` and `swarm_config.json`, same `brain/`. So the bot and heartbeat have the same config and “abilities” as the TUI (OpenRouter + brain), running in the background.
 
 ### 7. **Skills**
 
-- **Location** – `skills/` directory.  
-- **Usage** – TUI can list skills (`/skills`). Heartbeat runs **skill integrity check** (signatures / hashes). The Node version does not execute arbitrary skill code from the TUI; skills are for listing and integrity.
+- **Format** – OpenClaw-style: each skill is a **directory** under `skills/` with a **SKILL.md** file (YAML frontmatter + instructions). Same layout as ClawHub (`clawhub install`).
+- **Usage** – At session start, eligible skills (after gating and **security audit**) are injected into the system prompt so the model can follow skill instructions. TUI `/skills` and dashboard **Status** show counts; dashboard **Security** tab shows audit status and warnings.
+- **Security audit** – Before a skill is used, it is checked for prompt-injection and dangerous patterns. Results are cached (`brain/skill_audit_cache.json`); only audit-passed skills are included in the prompt.
 
 ### 8. **Access and security**
 
@@ -136,9 +137,9 @@ For **action**-classified messages, the agent runs an **agent loop** with **27+ 
 | **Session reset** | /new, /reset | ✅ /new, /reset in TUI |
 | **Model failover** | Auth rotation + fallbacks | ✅ Optional `fallback` in swarm_config per tier (429/5xx retry) |
 | **Brain / personality** | AGENTS.md, SOUL.md, USER, workspace | ✅ brain/soul.md, user.md, memory.md, personality setup |
-| **Skills** | Workspace skills, ClawHub | ✅ Signed skills in `skills/`, integrity check in heartbeat |
+| **Skills** | Workspace skills, ClawHub | ✅ OpenClaw-style SKILL.md in `skills/`, ClawHub-compatible; security audit before use, cache; Security tab |
 | **Scheduled tasks** | Cron, webhooks | ✅ Heartbeat (configurable interval); cron tool (list/add/remove/run in swarm_config.json) |
-| **Web dashboard** | Control UI + WebChat | ✅ Chat + Status + Config (Node HTTP, markdown + code blocks) |
+| **Web dashboard** | Control UI + WebChat | ✅ Chat + Status + Security + Config (Node HTTP, markdown + code blocks) |
 | **Safety** | Safety gate, sandbox for groups | ✅ safety-gate.js, kill-switch.js, audit-logger.js |
 | **Multi-channel** | WhatsApp, Slack, Discord, etc. | Telegram only (extensible) |
 | **Voice / Canvas / Nodes** | Voice Wake, A2UI, iOS/Android nodes | ❌ Not in scope (Node CLI/TUI + Telegram) |

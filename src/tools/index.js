@@ -12,7 +12,6 @@ const { getKillSwitch } = require('../kill-switch');
 const { checkPermission, ActionCategory } = require('../safety-gate');
 const { loadConfig } = require('../config');
 const { sendTelegramMessage } = require('../telegram-setup');
-const { listSkills } = require('../safe-skill-creator');
 const { runChecks } = require('../doctor');
 const { send: notifySend } = require('../notifier');
 
@@ -105,6 +104,20 @@ const TOOL_DEFINITIONS = [
           content: { type: 'string', description: 'Content to write' }
         },
         required: ['path', 'content']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'delete_file',
+      description: 'Delete a file. Only files under brain/ can be deleted (e.g. brain/BOOTSTRAP.md to complete the first-run ritual).',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'File path relative to project root (must be under brain/)' }
+        },
+        required: ['path']
       }
     }
   },
@@ -381,7 +394,6 @@ const TOOL_DEFINITIONS = [
       }
     }
   },
-  { type: 'function', function: { name: 'skills_list', description: 'List installed skills with name and signature validity.', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'doctor', description: 'Run health checks (config, env, daemon, skills). Returns checks with ok, message, fix.', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'notify', description: 'Send a desktop/system notification (title and message).', parameters: { type: 'object', properties: { title: { type: 'string' }, message: { type: 'string' } }, required: ['title', 'message'] } } },
   { type: 'function', function: { name: 'datetime', description: 'Get current date, time, and timezone.', parameters: { type: 'object', properties: {} } } },
@@ -402,7 +414,6 @@ const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'env_get', description: 'Read a safe env var (allowlist: NODE_ENV, LANG, etc.; never secrets).', parameters: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'] } } },
   { type: 'function', function: { name: 'run_tests', description: 'Run tests (npm test) and return pass/fail summary.', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'lint', description: 'Run linter (eslint) and return errors.', parameters: { type: 'object', properties: {} } } },
-  { type: 'function', function: { name: 'skill_invoke', description: 'Run a signed skill by name with optional params. Stub: not implemented.', parameters: { type: 'object', properties: { skill_name: { type: 'string' }, params: { type: 'object' } }, required: ['skill_name'] } } },
   { type: 'function', function: { name: 'ralph_get_next_story', description: 'Get the next Ralph story to implement. Reads prd.json and returns the highest-priority user story where passes is false, plus the Codebase Patterns section from progress.txt. Use this instead of manually reading prd.json when running the Ralph workflow.', parameters: { type: 'object', properties: { prd_path: { type: 'string', description: 'Path to prd.json relative to workspace (default prd.json)' }, progress_path: { type: 'string', description: 'Path to progress.txt (default progress.txt)' } } } } },
   { type: 'function', function: { name: 'ralph_mark_story_passed', description: 'Mark a user story as passed in the PRD. Sets passes to true for the given story id. Use after successfully implementing a story and passing quality checks.', parameters: { type: 'object', properties: { story_id: { type: 'string', description: 'User story id (e.g. US-001)' }, prd_path: { type: 'string', description: 'Path to prd.json (default prd.json)' } }, required: ['story_id'] } } },
   { type: 'function', function: { name: 'ralph_append_progress', description: 'Append a progress entry to progress.txt. Use after completing a story to record what was done and learnings for future iterations. Content is appended with a timestamp and separator.', parameters: { type: 'object', properties: { content: { type: 'string', description: 'Progress text (implementation summary and learnings)' }, progress_path: { type: 'string', description: 'Path to progress.txt (default progress.txt)' } }, required: ['content'] } } }
@@ -557,6 +568,27 @@ function runWriteFile(workspaceRoot, args, context) {
     fs.mkdirSync(path.dirname(fp), { recursive: true });
     fs.writeFileSync(fp, args.content, 'utf8');
     return { path: args.path, written: true };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+function runDeleteFile(workspaceRoot, args, context) {
+  const { killSwitch } = context || {};
+  if (killSwitch && killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
+  const perm = checkPermission(ActionCategory.FILE_WRITE, null, workspaceRoot);
+  if (!perm.allowed) return { error: 'Permission denied: file_write' };
+  const root = workspaceRoot || ROOT_DEFAULT;
+  const brainDir = getBrainDir(root);
+  try {
+    const fp = resolvePath(root, args.path);
+    if (!path.resolve(fp).startsWith(path.resolve(brainDir))) {
+      return { error: 'delete_file only allows files under brain/ (e.g. brain/BOOTSTRAP.md)' };
+    }
+    if (!fs.existsSync(fp)) return { error: 'File not found: ' + args.path };
+    if (!fs.statSync(fp).isFile()) return { error: 'Not a file: ' + args.path };
+    fs.unlinkSync(fp);
+    return { path: args.path, deleted: true };
   } catch (e) {
     return { error: e.message };
   }
@@ -829,11 +861,6 @@ async function runImage(workspaceRoot, args, context) {
   } catch (e) {
     return { error: e.response?.data?.error?.message || e.message || 'Vision call failed' };
   }
-}
-
-function runSkillsList(workspaceRoot) {
-  const skills = listSkills(path.join(workspaceRoot || ROOT_DEFAULT, 'skills'));
-  return { skills: skills.map((s) => ({ name: s.name, signature_valid: s.signature_valid })) };
 }
 
 function runDoctor(workspaceRoot) {
@@ -1124,10 +1151,6 @@ function runLint(workspaceRoot) {
   }
 }
 
-function runSkillInvokeStub() {
-  return { error: 'skill_invoke not implemented; skills list available via skills_list.' };
-}
-
 function runRalphGetNextStory(workspaceRoot, args) {
   const root = workspaceRoot || ROOT_DEFAULT;
   const prdPath = args.prd_path || 'prd.json';
@@ -1220,6 +1243,8 @@ async function runTool(workspaceRoot, toolName, args, context = {}) {
       return runReadFile(root, args, ctx);
     case 'write_file':
       return runWriteFile(root, args, ctx);
+    case 'delete_file':
+      return runDeleteFile(root, args, ctx);
     case 'memory_search':
       return runMemorySearch(root, args);
     case 'edit':
@@ -1258,8 +1283,6 @@ async function runTool(workspaceRoot, toolName, args, context = {}) {
       return runAgentsList();
     case 'image':
       return await runImage(root, args, ctx);
-    case 'skills_list':
-      return runSkillsList(root);
     case 'doctor':
       return runDoctor(root);
     case 'notify':
@@ -1300,8 +1323,6 @@ async function runTool(workspaceRoot, toolName, args, context = {}) {
       return runRunTests(root);
     case 'lint':
       return runLint(root);
-    case 'skill_invoke':
-      return runSkillInvokeStub();
     case 'ralph_get_next_story':
       return runRalphGetNextStory(root, args);
     case 'ralph_mark_story_passed':

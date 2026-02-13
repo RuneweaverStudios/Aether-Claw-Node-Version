@@ -14,17 +14,17 @@ function getSoulPath(root) {
   return path.join(root, 'brain', 'soul.md');
 }
 
+function getBootstrapPath(root) {
+  return path.join(root, 'brain', 'BOOTSTRAP.md');
+}
+
+function isBootstrapActive(root) {
+  return fs.existsSync(getBootstrapPath(root));
+}
+
+/** First run = bootstrap not complete (BOOTSTRAP.md still exists). After agent deletes it, false. */
 function isFirstRun(root) {
-  const userPath = getUserPath(root);
-  if (!fs.existsSync(userPath)) return true;
-  try {
-    const content = fs.readFileSync(userPath, 'utf8');
-    if (/\[Your name\]|\[To be filled|To be filled by user/i.test(content)) return true;
-    if (/\*\*Name\*\*:\s*$/m.test(content)) return true;
-    return false;
-  } catch (e) {
-    return true;
-  }
+  return isBootstrapActive(root);
 }
 
 function updateUserProfile(root, name, projects, vibe) {
@@ -74,4 +74,4 @@ function updateSoul(root, agentName, vibe, dynamic) {
   fs.writeFileSync(soulPath, content, 'utf8');
 }
 
-module.exports = { isFirstRun, updateUserProfile, updateSoul, getUserPath, getSoulPath };
+module.exports = { isFirstRun, isBootstrapActive, getBootstrapPath, updateUserProfile, updateSoul, getUserPath, getSoulPath };

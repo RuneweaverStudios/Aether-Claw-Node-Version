@@ -20,6 +20,14 @@ REPO_URL="https://github.com/RuneweaverStudios/Aether-Claw-Node-Version.git"
 BRANCH="main"
 INSTALLER_RAW="https://raw.githubusercontent.com/RuneweaverStudios/Aether-Claw-Node-Version/main/install.sh"
 
+# Ensure OPENROUTER_API_KEY is set in .env; run onboarding interactively if not.
+ensure_onboard() {
+  if [ ! -f "$INSTALL_DIR/.env" ] || ! grep -q "OPENROUTER_API_KEY=.\+" "$INSTALL_DIR/.env" 2>/dev/null; then
+    printf "\n${CYAN}API key required. Running onboarding (OpenRouter key, model, etc.)...${NC}\n\n"
+    (cd "$INSTALL_DIR" && node src/cli.js onboard < /dev/tty)
+  fi
+}
+
 # If this script is running from inside the install dir, re-run with latest from GitHub so options menu is always current
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 if [ -d "$INSTALL_DIR" ] && [ "$SCRIPT_DIR" = "$(cd "$INSTALL_DIR" && pwd)" ] && command -v curl &>/dev/null; then
@@ -190,9 +198,11 @@ PLISTEOF
     fi
     launch_choice=${launch_choice:-3}
     if [ "$launch_choice" = "1" ]; then
+      ensure_onboard
       printf "\n${CYAN}Launching TUI...${NC}\n\n"
       cd "$INSTALL_DIR" && node src/cli.js tui < /dev/tty
     elif [ "$launch_choice" = "2" ]; then
+      ensure_onboard
       printf "\n${CYAN}Launching Web dashboard...${NC}\n\n"
       cd "$INSTALL_DIR" && node src/cli.js dashboard
     fi
@@ -338,7 +348,7 @@ if [ -d "$INSTALL_DIR" ]; then
                 start_choice=${start_choice:-2}
                 case "$start_choice" in
                     1) node src/cli.js onboard < /dev/tty ;;
-                    2) node src/cli.js tui < /dev/tty ;;
+                    2) ensure_onboard; node src/cli.js tui < /dev/tty ;;
                     *) printf "  Run: ${CYAN}cd $INSTALL_DIR && node src/cli.js tui${NC}\n\n" ;;
                 esac
                 exit 0
@@ -386,6 +396,9 @@ npm install --silent
 
 printf "\n${GREEN}✓ Installation complete.${NC}\n\n"
 
+# Fresh install: run onboarding (OpenRouter key, model, etc.) before offering TUI/Web or gateway
+ensure_onboard
+
 # Gateway daemon (macOS): check / restart / reinstall
 gateway_prompt
 
@@ -399,12 +412,12 @@ printf "  ${CYAN}[2]${NC} Launch TUI (chat interface)\n"
 printf "  ${CYAN}[3]${NC} Exit (run manually later)\n\n"
 
 if [ -t 0 ]; then
-    read -p "  Choose [1-3] (default: 1): " choice
+    read -p "  Choose [1-3] (default: 2): " choice
 else
-    read -p "  Choose [1-3] (default: 1): " choice < /dev/tty
+    read -p "  Choose [1-3] (default: 2): " choice < /dev/tty
 fi
 
-choice=${choice:-1}
+choice=${choice:-2}
 
 cd "$INSTALL_DIR"
 
@@ -414,6 +427,7 @@ case "$choice" in
         node src/cli.js onboard < /dev/tty
         ;;
     2)
+        ensure_onboard
         printf "\n${CYAN}Launching TUI...${NC}\n\n"
         node src/cli.js tui < /dev/tty
         ;;
