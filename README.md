@@ -5,15 +5,7 @@ A **secure, swarm-based AI assistant** with persistent memory, proactive automat
 ## Quick Install
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/your-repo/aether-claw/main/install.sh | bash
-```
-
-Or manually:
-
-```bash
-git clone https://github.com/your-repo/aether-claw.git ~/.aether-claw
-cd ~/.aether-claw
-pip install -r requirements.txt
+curl -sSL https://raw.githubusercontent.com/RuneweaverStudios/aetherclaw/main/install.sh | bash
 ```
 
 ## Onboarding
@@ -45,27 +37,38 @@ Or add to `~/.aether-claw/.env`:
 OPENROUTER_API_KEY=your-key
 ```
 
-## Usage
+## Interfaces
 
 ```bash
-aetherclaw status              # View system status
-aetherclaw onboard             # Interactive setup
-aetherclaw heartbeat           # Start scheduled tasks
-aetherclaw heartbeat --run-once  # Run tasks once
-aetherclaw dashboard           # Launch web UI
-aetherclaw swarm -t "task"     # Execute swarm task
-aetherclaw sign-skill --create file.py  # Create signed skill
-aetherclaw verify-skills       # Verify all skill signatures
+aetherclaw tui         # Terminal interface with chat
+aetherclaw dashboard   # Web UI (Streamlit) with chat, memory, skills
+aetherclaw telegram    # Start Telegram bot for remote chat
 ```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `onboard` | Interactive setup wizard |
+| `tui` | Launch terminal interface |
+| `dashboard` | Launch web dashboard |
+| `telegram` | Start Telegram bot |
+| `status` | Show system status |
+| `heartbeat` | Run scheduled tasks |
+| `sign-skill` | Create/verify signed skills |
+| `verify-skills` | Verify all skill signatures |
+| `kill-switch` | Manage kill switch |
+| `swarm` | Execute swarm tasks |
 
 ## Features
 
-- **Persistent Memory**: Long-term recall via Markdown-based storage with SQLite indexing
+- **Persistent Memory**: Long-term recall via Markdown-based storage with SQLite FTS5 indexing
 - **Proactive Automation**: Scheduled heartbeat tasks that run autonomously
-- **Multi-Tool Integration**: Shell commands, file management, and API interactions
-- **Skill Extensibility**: Create new skills with cryptographic RSA signing
-- **Local-First Execution**: Runs on your hardware for privacy
-- **Swarm Orchestration**: Multiple AI agents working in parallel
+- **Cryptographic Signing**: RSA-2048 signed skills with Bandit security scanning
+- **Terminal TUI**: Rich terminal interface with chat and system commands
+- **Web Dashboard**: Streamlit-based UI with chat, memory search, skill management
+- **Telegram Integration**: Chat with your agent remotely via Telegram bot
+- **Swarm Orchestration**: Multiple AI agents working in parallel with isolation
 - **Security Hardened**: Permission boundaries, audit logging, and kill switch
 
 ## Architecture
@@ -105,12 +108,14 @@ aetherclaw verify-skills       # Verify all skill signatures
 │   ├── memory.md            # Long-term memory log
 │   ├── heartbeat.md         # Proactive task config
 │   ├── audit_log.md         # Immutable audit trail
-│   └── brain_index.db       # SQLite index (generated)
+│   └── brain_index.db       # SQLite FTS5 index
 ├── skills/                   # Signed skills registry
 ├── swarm/                    # Swarm orchestration
 ├── tasks/                    # Heartbeat tasks
 ├── .env                      # API keys (gitignored)
 ├── aether_claw.py           # Main CLI
+├── tui.py                   # Terminal interface
+├── dashboard.py             # Streamlit dashboard
 └── swarm_config.json        # Configuration
 ```
 
@@ -152,15 +157,6 @@ aetherclaw kill-switch --arm     # Arm kill switch
 aetherclaw kill-switch --reset   # Reset after trigger
 ```
 
-## Configuration
-
-Edit `swarm_config.json` to customize:
-- Model routing
-- Safety gate settings
-- Kill switch triggers
-- Heartbeat interval
-- Swarm worker limits
-
 ## Heartbeat Tasks
 
 Automated tasks that run on a schedule:
@@ -170,14 +166,46 @@ Automated tasks that run on a schedule:
 | `git_repo_scan` | Scan for git repositories |
 | `memory_index_update` | Update brain index |
 | `skill_integrity_check` | Verify skill signatures |
-| `system_health_check` | Monitor CPU/memory |
+| `system_health_check` | Monitor CPU/memory/disk |
 | `task_list_review` | Review task lists |
+
+## Telegram Setup
+
+1. Create a bot via [@BotFather](https://t.me/botfather) on Telegram
+2. Get your bot token
+3. Get your chat ID (message @userinfobot)
+4. Set environment variables:
+
+```bash
+export TELEGRAM_BOT_TOKEN="your-bot-token"
+export TELEGRAM_CHAT_ID="your-chat-id"
+```
+
+5. Start the bot:
+
+```bash
+aetherclaw telegram
+```
+
+## Configuration
+
+Edit `swarm_config.json` to customize:
+- Model routing
+- Safety gate settings
+- Kill switch triggers
+- Heartbeat interval
+- Swarm worker limits
 
 ## Development
 
 ```bash
-# Install dev dependencies
-pip install -e ".[dev]"
+# Clone and install
+git clone https://github.com/RuneweaverStudios/aetherclaw.git
+cd aetherclaw
+pip install -r requirements.txt
+
+# Run onboarding
+python3 aether_claw.py onboard
 
 # Run tests
 pytest
