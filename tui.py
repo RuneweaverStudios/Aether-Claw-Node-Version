@@ -293,12 +293,56 @@ Respond in plain text (not markdown code blocks unless showing code)."""
 
 def main():
     """Main TUI loop."""
+    # Check stdin status and try to ensure we have a working input source
+    stdin_isatty = False
+    tty_available = False
+    
+    try:
+        stdin_isatty = sys.stdin.isatty()
+    except Exception:
+        pass
+    
+    # Check if /dev/tty is available
+    try:
+        with open('/dev/tty', 'r') as f:
+            tty_available = True
+    except (OSError, IOError):
+        tty_available = False
+    
+    # If stdin is not a TTY and /dev/tty is available, prefer /dev/tty
+    # Input reading is handled inline in the main loop
+    if not stdin_isatty and not tty_available:
+        console.print("[yellow]Warning: No interactive terminal available.[/]")
+        console.print("[yellow]TUI requires an interactive terminal to function.[/]")
+        console.print("[dim]If running via SSH, use: ssh -t user@host[/]")
+        console.print()
+
     console.clear()
 
     # Show welcome banner
     render_banner()
-    console.print("[dim]Type /help for commands, or start chatting[/]")
-    console.print()
+    
+    # Check if first run and run personality setup
+    try:
+        from personality_setup import is_first_run, run_personality_setup
+        
+        if is_first_run():
+            # Run OpenClaw-style personality setup
+            if run_personality_setup():
+                console.print("[dim]Type /help for commands, or start chatting[/]")
+                console.print()
+        else:
+            console.print("[dim]Type /help for commands, or start chatting[/]")
+            console.print()
+    except ImportError:
+        # personality_setup not available, skip
+        console.print("[dim]Type /help for commands, or start chatting[/]")
+        console.print()
+    except Exception as e:
+        # Setup failed, continue anyway
+        console.print(f"[yellow]Note: Could not run personality setup: {e}[/]")
+        console.print("[dim]Type /help for commands, or start chatting[/]")
+        console.print()
 
     while True:
         try:
@@ -322,9 +366,58 @@ def main():
                         style="blue"
                     ))
 
-            # Get input
+            # Get input using safe method
             console.print()
-            user_input = Prompt.ask("[bold cyan]>[/]").strip()
+            try:
+                # Print styled prompt with Rich
+                console.print("[bold cyan]>[/] ", end='')
+                sys.stdout.flush()
+                
+                # Try to read input - prefer /dev/tty, fallback to stdin
+                user_input = None
+                
+                # First try /dev/tty (always works in real terminals)
+                try:
+                    with open('/dev/tty', 'r') as tty_file:
+                        user_input = tty_file.readline().strip()
+                except (OSError, IOError):
+                    # /dev/tty not available, try stdin
+                    try:
+                        # Check if stdin is readable
+                        if not sys.stdin.closed:
+                            user_input = sys.stdin.readline().strip()
+                        else:
+                            raise EOFError("stdin is closed")
+                    except (EOFError, OSError, IOError):
+                        # stdin also failed, try input() as last resort
+                        try:
+                            user_input = input().strip()
+                        except EOFError:
+                            raise EOFError("Cannot read from stdin")
+                
+                if not user_input:
+                    continue  # Empty input, loop again
+                    
+            except EOFError as e:
+                console.print(f"\n[yellow]Input stream closed: {e}[/]")
+                console.print("[yellow]TUI requires an interactive terminal.[/]")
+                console.print("[dim]Try running directly: python3 tui.py[/]")
+                console.print("[yellow]Goodbye![/]")
+                break
+            except EOFError as e:
+                console.print(f"\n[yellow]Input stream closed: {e}[/]")
+                console.print("[yellow]TUI requires an interactive terminal.[/]")
+                console.print("[dim]Try running directly: python3 tui.py[/]")
+                console.print("[yellow]Goodbye![/]")
+                break
+            except KeyboardInterrupt:
+                console.print("\n[yellow]Use /quit to exit[/]")
+                continue
+            except Exception as e:
+                console.print(f"\n[red]Error reading input: {e}[/]")
+                console.print("[yellow]TUI requires an interactive terminal.[/]")
+                console.print("[yellow]Goodbye![/]")
+                break
 
             if not user_input:
                 continue
@@ -372,8 +465,13 @@ def main():
 
         except KeyboardInterrupt:
             console.print("\n[yellow]Use /quit to exit[/]")
+            continue
         except EOFError:
-            console.print("\n[yellow]Goodbye![/]")
+            console.print("\n[yellow]Input stream closed. Goodbye![/]")
+            break
+        except Exception as e:
+            console.print(f"\n[red]Unexpected error: {e}[/]")
+            console.print("[yellow]Goodbye![/]")
             break
 
 

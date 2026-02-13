@@ -396,17 +396,77 @@ def cmd_onboard(args):
     print("  • System health monitoring")
     print()
 
-    start_daemon = tty_input("  Install gateway daemon? [Y/n]: ", "y").lower()
-    start_daemon = start_daemon != 'n'
+    # Check if daemon already exists
+    launch_dir = Path.home() / 'Library' / 'LaunchAgents'
+    plist_path = launch_dir / 'com.aetherclaw.heartbeat.plist'
+    daemon_exists = plist_path.exists()
+    
+    # Check if daemon is loaded
+    daemon_loaded = False
+    if daemon_exists:
+        import subprocess
+        result = subprocess.run(
+            ['launchctl', 'list'],
+            capture_output=True,
+            text=True
+        )
+        if result.returncode == 0:
+            daemon_loaded = 'com.aetherclaw.heartbeat' in result.stdout
 
-    if start_daemon:
+    if daemon_exists:
+        status = "loaded and running" if daemon_loaded else "installed but not running"
+        print(f"  ✓ Gateway daemon already exists ({status})")
         print()
-        print("  → Creating gateway daemon...")
+        print("  [1] Reinstall (overwrite existing)")
+        print("  [2] Restart (reload daemon)")
+        print("  [3] Skip")
+        print()
+        choice = tty_input("  Choose [1-3] (default: 2): ", "2")
+        
+        if choice == '1':
+            # Reinstall - overwrite plist and reload
+            print()
+            print("  → Reinstalling gateway daemon...")
+            action = "reinstalling"
+        elif choice == '2':
+            # Restart - just reload
+            print()
+            print("  → Restarting gateway daemon...")
+            action = "restarting"
+            
+            # Unload first
+            import subprocess
+            subprocess.run(
+                ['launchctl', 'unload', str(plist_path)],
+                capture_output=True
+            )
+            
+            # Reload
+            result = subprocess.run(
+                ['launchctl', 'load', str(plist_path)],
+                capture_output=True
+            )
+            if result.returncode == 0:
+                print("  ✓ Gateway daemon restarted")
+                print(f"    Log file: /tmp/aetherclaw.log")
+            else:
+                print("  ⚠ Could not restart daemon")
+                print(f"    Run: launchctl load {plist_path}")
+            action = None  # Already handled
+        else:
+            print("  ℹ Gateway daemon skipped")
+            action = None
+    else:
+        # New installation
+        start_daemon = tty_input("  Install gateway daemon? [Y/n]: ", "y").lower()
+        start_daemon = start_daemon != 'n'
+        action = "installing" if start_daemon else None
 
+    if action:
         # Create launch agent for macOS
-        launch_dir = Path.home() / 'Library' / 'LaunchAgents'
         launch_dir.mkdir(parents=True, exist_ok=True)
-        print("  ✓ Created LaunchAgents directory")
+        if action == "installing":
+            print("  ✓ Created LaunchAgents directory")
 
         plist_content = f'''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -433,17 +493,20 @@ def cmd_onboard(args):
 </dict>
 </plist>'''
 
-        plist_path = launch_dir / 'com.aetherclaw.heartbeat.plist'
+        # Unload existing if reinstalling
+        if action == "reinstalling":
+            import subprocess
+            subprocess.run(
+                ['launchctl', 'unload', str(plist_path)],
+                capture_output=True
+            )
+
         with open(plist_path, 'w') as f:
             f.write(plist_content)
         print("  ✓ Created LaunchAgent plist")
 
         # Load the daemon
         import subprocess
-        result = subprocess.run(
-            ['launchctl', 'unload', str(plist_path)],
-            capture_output=True
-        )
         result = subprocess.run(
             ['launchctl', 'load', str(plist_path)],
             capture_output=True
@@ -454,8 +517,6 @@ def cmd_onboard(args):
         else:
             print("  ⚠ Could not auto-load daemon (may need manual start)")
             print(f"    Run: launchctl load {plist_path}")
-    else:
-        print("  ℹ Gateway daemon skipped (run manually with: aetherclaw heartbeat)")
 
     # Step 5: Index Brain
     print("\n[5/6] 🧠 Memory Indexing")
@@ -506,9 +567,11 @@ def cmd_onboard(args):
 
     if hatch == '1':
         print("\n  🐣 Hatching into TUI...")
+        import subprocess
         tui_path = Path(__file__).parent / 'tui.py'
-        # Use os.execv to replace current process with TUI
-        os.execv(sys.executable, [sys.executable, str(tui_path)])
+        # Use subprocess.run to preserve stdin/stdout/stderr properly
+        # This ensures stdin is connected even if it was piped
+        subprocess.run([sys.executable, str(tui_path)], stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr)
     elif hatch == '2':
         print("\n  🐣 Launching Dashboard...")
         import subprocess
@@ -662,7 +725,13 @@ def cmd_tui(args):
     """Launch terminal TUI."""
     import subprocess
     tui_path = Path(__file__).parent / 'tui.py'
-    subprocess.run([sys.executable, str(tui_path)])
+    # Preserve stdin/stdout/stderr to ensure TUI can read input
+    subprocess.run(
+        [sys.executable, str(tui_path)],
+        stdin=sys.stdin,
+        stdout=sys.stdout,
+        stderr=sys.stderr
+    )
 
 
 def cmd_telegram(args):

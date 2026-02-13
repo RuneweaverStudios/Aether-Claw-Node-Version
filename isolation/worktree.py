@@ -197,10 +197,15 @@ class WorktreeManager:
             elif line.startswith('HEAD '):
                 current_commit = line.split(' ', 1)[1]
             elif line.startswith('branch '):
-                current_branch = line.split(' ', 1)[1]
+                branch_ref = line.split(' ', 1)[1]
+                # Extract branch name from refs/heads/branch-name
+                if branch_ref.startswith('refs/heads/'):
+                    current_branch = branch_ref.replace('refs/heads/', '')
+                else:
+                    current_branch = branch_ref
             elif line == '' and current_path:
                 # End of entry
-                if self.prefix in (current_branch or ''):
+                if current_branch and self.prefix in current_branch:
                     worktrees.append(WorktreeInfo(
                         path=current_path,
                         branch=current_branch or 'detached',

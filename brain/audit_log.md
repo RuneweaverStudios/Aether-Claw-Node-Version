@@ -142,3 +142,5 @@ Record all kill switch activations:
 - Executing task: system_health_check
 ### 2026-02-13T03:36:00.689541 | INFO | HeartbeatDaemon | TASK_COMPLETED
 - system_health_check: System healthy
+### 2026-02-13T07:00:17.677471 | INFO | GLMClient | API_CALL
+- Model: anthropic/claude-3.7-sonnet, Tokens: 122

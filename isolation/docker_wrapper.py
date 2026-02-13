@@ -113,27 +113,22 @@ class DockerIsolation:
             'command': command or ['/bin/bash', '-c', 'sleep infinity'],
         }
 
-        # Resource limits
-        host_config = {
-            'cpu_quota': self.config.cpu_quota,
-            'mem_limit': self.config.memory_limit,
-        }
-
-        # Security options
+        # Resource limits and security options
+        mem_limit = self.config.memory_limit
+        cpu_quota = self.config.cpu_quota
         security_opt = ['no-new-privileges']
         cap_drop = ['ALL']
-
-        # Network configuration
-        if not self.config.network_enabled:
-            host_config['network_mode'] = 'none'
+        network_mode = 'none' if not self.config.network_enabled else None
 
         # Create container
         try:
             container = self.client.containers.create(
                 **container_config,
-                host_config=self.client.api.create_host_config(**host_config),
+                mem_limit=mem_limit,
+                cpu_quota=cpu_quota,
                 security_opt=security_opt,
                 cap_drop=cap_drop,
+                network_mode=network_mode,
                 volumes=volumes
             )
 

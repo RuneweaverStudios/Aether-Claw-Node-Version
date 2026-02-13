@@ -2,11 +2,10 @@
   "version": "1.0.0",
   "created": "2026-02-12",
   "system_name": "Aether-Claw",
-
   "model_routing": {
     "tier_1_reasoning": {
       "endpoint": "http://localhost:8081",
-      "model": "GLM-4.7",
+      "model": "minimax/minimax-m2.5",
       "use_cases": [
         "architectural_planning",
         "skill_discovery",
@@ -19,7 +18,7 @@
     },
     "tier_2_action": {
       "endpoint": "http://localhost:8082",
-      "model": "GLM-4.7-Flash",
+      "model": "google/gemini-2.5-flash-preview",
       "use_cases": [
         "boilerplate_generation",
         "testing",
@@ -31,7 +30,6 @@
       "temperature": 0.5
     }
   },
-
   "safety_gate": {
     "enabled": true,
     "confirmation_required": {
@@ -53,7 +51,6 @@
     "timeout_seconds": 300,
     "max_retries": 3
   },
-
   "swarm_orchestration": {
     "max_workers": 3,
     "isolation_mode": "docker",
@@ -65,12 +62,15 @@
     },
     "docker_config": {
       "base_image": "python:3.11-slim",
-      "security_opts": ["no-new-privileges"],
+      "security_opts": [
+        "no-new-privileges"
+      ],
       "read_only_root": false,
-      "capabilities_drop": ["ALL"]
+      "capabilities_drop": [
+        "ALL"
+      ]
     }
   },
-
   "kill_switch": {
     "enabled": true,
     "triggers": {
@@ -90,7 +90,6 @@
     },
     "recovery_mode": "manual"
   },
-
   "audit": {
     "log_file": "brain/audit_log.md",
     "log_level": "INFO",
@@ -98,7 +97,6 @@
     "immutable": true,
     "retention_days": 365
   },
-
   "brain": {
     "directory": "brain",
     "index_db": "brain/brain_index.db",
@@ -110,7 +108,6 @@
       "audit_log": "audit_log.md"
     }
   },
-
   "skills": {
     "directory": "skills",
     "registry_file": "skills/registry.json",
@@ -120,20 +117,17 @@
     "key_path": "~/.claude/secure/secure_key.pem",
     "public_key_path": "~/.claude/secure/public_key.pem"
   },
-
   "heartbeat": {
     "enabled": true,
     "interval_minutes": 30,
     "config_file": "brain/heartbeat.md",
     "notification_library": "plyer"
   },
-
   "dashboard": {
     "host": "localhost",
     "port": 8501,
     "refresh_seconds": 5
   },
-
   "logging": {
     "level": "INFO",
     "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
