@@ -23,6 +23,50 @@ function ttyQuestion(prompt, defaultVal = '') {
   });
 }
 
+/** Ask for input with masked echo (e.g. API key). Uses * per character. */
+function ttyQuestionMasked(prompt) {
+  return new Promise((resolve) => {
+    const stdin = process.stdin;
+    const stdout = process.stdout;
+    if (!stdin.isTTY) {
+      return ttyQuestion(prompt).then(resolve);
+    }
+    stdout.write(prompt);
+    stdin.setRawMode(true);
+    stdin.resume();
+    stdin.setEncoding('utf8');
+    let secret = '';
+    const cleanup = () => {
+      stdin.removeListener('data', onData);
+      stdin.setRawMode(false);
+      stdin.pause();
+    };
+    const onData = (ch) => {
+      if (ch === '\n' || ch === '\r' || ch === '\u0004') {
+        cleanup();
+        stdout.write('\n');
+        resolve(secret.trim());
+        return;
+      }
+      if (ch === '\u0003') {
+        cleanup();
+        process.exit(130);
+        return;
+      }
+      if (ch === '\u007f' || ch === '\b') {
+        if (secret.length > 0) {
+          secret = secret.slice(0, -1);
+          stdout.write('\b \b');
+        }
+        return;
+      }
+      secret += ch;
+      stdout.write('*');
+    };
+    stdin.on('data', onData);
+  });
+}
+
 async function cmdOnboard() {
   console.log('\n  ' + chalk.cyan('╔════════════════════════════════════════════════════╗'));
   console.log('  ║              🥚 AETHERCLAW ONBOARDING 🥚             ║');
@@ -31,8 +75,9 @@ async function cmdOnboard() {
   let key = process.env.OPENROUTER_API_KEY;
   if (!key) {
     console.log('  [1/3] 🔑 API Key');
-    console.log('  Get your key at: https://openrouter.ai/keys\n');
-    key = await ttyQuestion('  Enter OpenRouter API key');
+    console.log('  Get your key at: https://openrouter.ai/keys');
+    console.log('  (input is hidden; press Enter when done)\n');
+    key = await ttyQuestionMasked('  Enter OpenRouter API key: ');
     if (key) {
       const envPath = path.join(ROOT, '.env');
       const line = `OPENROUTER_API_KEY=${key}\n`;
