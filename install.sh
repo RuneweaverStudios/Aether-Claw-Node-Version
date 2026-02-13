@@ -18,16 +18,13 @@ NC='\033[0m'
 INSTALL_DIR="${HOME}/.aether-claw-node"
 REPO_URL="https://github.com/RuneweaverStudios/Aether-Claw-Node-Version.git"
 BRANCH="main"
-FORCE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --force|-f) FORCE=true; shift ;;
         --branch|-b) BRANCH="$2"; shift 2 ;;
         --dir|-d) INSTALL_DIR="$2"; shift 2 ;;
         --help|-h)
             echo "Usage: curl -sSL <url> | bash -s -- [OPTIONS]"
-            echo "  --force, -f       Force reinstall"
             echo "  --branch, -b      Git branch (default: main)"
             echo "  --dir, -d DIR     Install directory (default: ~/.aether-claw-node)"
             exit 0
@@ -62,16 +59,127 @@ printf "${GREEN}✓${NC} npm $(npm -v)\n"
 # Install
 printf "\n${BLUE}Installing to $INSTALL_DIR...${NC}\n"
 
+RESTORE_ENV=""
+RESTORE_CONFIG=""
+RESTORE_BRAIN=""
+RESTORE_SKILLS=""
+WIPE_CREDS_ONLY=""
+
 if [ -d "$INSTALL_DIR" ]; then
-    if [ "$FORCE" = true ]; then
-        printf "${YELLOW}Removing existing installation...${NC}\n"
-        rm -rf "$INSTALL_DIR"
-    else
-        printf "${YELLOW}Existing installation at $INSTALL_DIR${NC}\n"
-        printf "  Use --force to reinstall\n\n"
-        printf "  Run: ${CYAN}cd $INSTALL_DIR && node src/cli.js tui${NC}\n"
-        exit 0
-    fi
+    # Detect existing data and show options
+    printf "${YELLOW}Existing installation found at $INSTALL_DIR${NC}\n\n"
+
+        HAS_CREDENTIALS=false
+        HAS_CONFIG=false
+        HAS_SESSIONS=false
+
+        if [ -f "$INSTALL_DIR/.env" ]; then
+            if grep -q "OPENROUTER_API_KEY=.\+" "$INSTALL_DIR/.env" 2>/dev/null; then
+                HAS_CREDENTIALS=true
+                printf "  ${GREEN}✓${NC} Credentials found (.env)\n"
+            fi
+        fi
+
+        if [ -f "$INSTALL_DIR/swarm_config.json" ]; then
+            HAS_CONFIG=true
+            printf "  ${GREEN}✓${NC} Configuration found (swarm_config.json)\n"
+        fi
+
+        if [ -f "$INSTALL_DIR/brain/brain_index.json" ] || [ -d "$INSTALL_DIR/brain" ] && [ "$(ls -A $INSTALL_DIR/brain/*.md 2>/dev/null)" ]; then
+            HAS_SESSIONS=true
+            printf "  ${GREEN}✓${NC} Session data found (brain, memory)\n"
+        fi
+        if [ -d "$INSTALL_DIR/skills" ] && [ "$(ls -A $INSTALL_DIR/skills 2>/dev/null)" ]; then
+            HAS_SESSIONS=true
+            printf "  ${GREEN}✓${NC} Skills found\n"
+        fi
+
+        printf "\n"
+        printf "  ${CYAN}[1]${NC} Reinstall fresh (reset everything)\n"
+        printf "  ${CYAN}[2]${NC} Reset credentials only (keep config & sessions)\n"
+        printf "  ${CYAN}[3]${NC} Reset config only (keep credentials & sessions)\n"
+        printf "  ${CYAN}[4]${NC} Reset sessions only (keep credentials & config)\n"
+        printf "  ${CYAN}[5]${NC} Update only (fresh code, keep all data)\n"
+        printf "  ${CYAN}[6]${NC} Cancel / Run existing installation\n"
+        printf "\n"
+
+        if [ -t 0 ]; then
+            read -p "  Select option [1-6]: " choice
+        else
+            read -p "  Select option [1-6]: " choice < /dev/tty
+        fi
+
+        choice=${choice:-6}
+
+        case "$choice" in
+            1)
+                printf "\n${YELLOW}Resetting everything...${NC}\n"
+                rm -rf "$INSTALL_DIR"
+                ;;
+            2)
+                printf "\n${YELLOW}Resetting credentials only...${NC}\n"
+                [ -f "$INSTALL_DIR/swarm_config.json" ] && cp "$INSTALL_DIR/swarm_config.json" /tmp/aethernode-config-backup
+                [ -d "$INSTALL_DIR/brain" ] && cp -r "$INSTALL_DIR/brain" /tmp/aethernode-brain-backup
+                [ -d "$INSTALL_DIR/skills" ] && cp -r "$INSTALL_DIR/skills" /tmp/aethernode-skills-backup
+                rm -rf "$INSTALL_DIR"
+                RESTORE_CONFIG=1
+                RESTORE_BRAIN=1
+                RESTORE_SKILLS=1
+                WIPE_CREDS_ONLY=1
+                ;;
+            3)
+                printf "\n${YELLOW}Resetting config only...${NC}\n"
+                [ -f "$INSTALL_DIR/.env" ] && cp "$INSTALL_DIR/.env" /tmp/aethernode-env-backup
+                [ -d "$INSTALL_DIR/brain" ] && cp -r "$INSTALL_DIR/brain" /tmp/aethernode-brain-backup
+                [ -d "$INSTALL_DIR/skills" ] && cp -r "$INSTALL_DIR/skills" /tmp/aethernode-skills-backup
+                rm -rf "$INSTALL_DIR"
+                RESTORE_ENV=1
+                RESTORE_BRAIN=1
+                RESTORE_SKILLS=1
+                ;;
+            4)
+                printf "\n${YELLOW}Resetting sessions only...${NC}\n"
+                [ -f "$INSTALL_DIR/.env" ] && cp "$INSTALL_DIR/.env" /tmp/aethernode-env-backup
+                [ -f "$INSTALL_DIR/swarm_config.json" ] && cp "$INSTALL_DIR/swarm_config.json" /tmp/aethernode-config-backup
+                rm -rf "$INSTALL_DIR"
+                RESTORE_ENV=1
+                RESTORE_CONFIG=1
+                ;;
+            5)
+                printf "\n${YELLOW}Updating code only...${NC}\n"
+                [ -f "$INSTALL_DIR/.env" ] && cp "$INSTALL_DIR/.env" /tmp/aethernode-env-backup
+                [ -f "$INSTALL_DIR/swarm_config.json" ] && cp "$INSTALL_DIR/swarm_config.json" /tmp/aethernode-config-backup
+                [ -d "$INSTALL_DIR/brain" ] && cp -r "$INSTALL_DIR/brain" /tmp/aethernode-brain-backup
+                [ -d "$INSTALL_DIR/skills" ] && cp -r "$INSTALL_DIR/skills" /tmp/aethernode-skills-backup
+                rm -rf "$INSTALL_DIR"
+                RESTORE_ENV=1
+                RESTORE_CONFIG=1
+                RESTORE_BRAIN=1
+                RESTORE_SKILLS=1
+                ;;
+            6|*)
+                printf "\n${CYAN}Using existing installation.${NC}\n\n"
+                cd "$INSTALL_DIR"
+                printf "${CYAN}╔════════════════════════════════════════════════════╗${NC}\n"
+                printf "${CYAN}║${NC}              ${YELLOW}Ready to get started?${NC}                  ${CYAN}║${NC}\n"
+                printf "${CYAN}╚════════════════════════════════════════════════════╝${NC}\n\n"
+                printf "  ${CYAN}[1]${NC} Run onboarding\n"
+                printf "  ${CYAN}[2]${NC} Launch TUI (chat)\n"
+                printf "  ${CYAN}[3]${NC} Exit\n\n"
+                if [ -t 0 ]; then
+                    read -p "  Choose [1-3] (default: 2): " start_choice
+                else
+                    read -p "  Choose [1-3] (default: 2): " start_choice < /dev/tty
+                fi
+                start_choice=${start_choice:-2}
+                case "$start_choice" in
+                    1) node src/cli.js onboard ;;
+                    2) node src/cli.js tui ;;
+                    *) printf "  Run: ${CYAN}cd $INSTALL_DIR && node src/cli.js tui${NC}\n\n" ;;
+                esac
+                exit 0
+                ;;
+        esac
 fi
 
 mkdir -p "$INSTALL_DIR"
@@ -84,6 +192,28 @@ if command -v git &> /dev/null; then
 else
     printf "${YELLOW}Downloading archive...${NC}\n"
     curl -sSL "https://github.com/RuneweaverStudios/Aether-Claw-Node-Version/archive/refs/heads/${BRANCH}.tar.gz" | tar -xzf - --strip-components=1 -C .
+fi
+
+# Restore backups
+[ -n "$RESTORE_ENV" ] && [ -f /tmp/aethernode-env-backup ] && mv /tmp/aethernode-env-backup "$INSTALL_DIR/.env" && printf "${GREEN}✓${NC} Restored credentials\n"
+[ -n "$RESTORE_CONFIG" ] && [ -f /tmp/aethernode-config-backup ] && mv /tmp/aethernode-config-backup "$INSTALL_DIR/swarm_config.json" && printf "${GREEN}✓${NC} Restored config\n"
+if [ -n "$RESTORE_BRAIN" ] && [ -d /tmp/aethernode-brain-backup ]; then
+    mkdir -p "$INSTALL_DIR/brain"
+    cp -r /tmp/aethernode-brain-backup/* "$INSTALL_DIR/brain/" 2>/dev/null
+    rm -rf /tmp/aethernode-brain-backup
+    printf "${GREEN}✓${NC} Restored brain\n"
+fi
+if [ -n "$RESTORE_SKILLS" ] && [ -d /tmp/aethernode-skills-backup ]; then
+    mkdir -p "$INSTALL_DIR/skills"
+    cp -r /tmp/aethernode-skills-backup/* "$INSTALL_DIR/skills/" 2>/dev/null
+    rm -rf /tmp/aethernode-skills-backup
+    printf "${GREEN}✓${NC} Restored skills\n"
+fi
+
+# Credentials reset: remove API key from .env if we only wiped creds
+if [ -n "$WIPE_CREDS_ONLY" ] && [ -f "$INSTALL_DIR/.env" ]; then
+    grep -v "OPENROUTER_API_KEY" "$INSTALL_DIR/.env" > "$INSTALL_DIR/.env.tmp" 2>/dev/null || true
+    mv "$INSTALL_DIR/.env.tmp" "$INSTALL_DIR/.env" 2>/dev/null || true
 fi
 
 # Install dependencies
@@ -101,7 +231,6 @@ printf "  ${CYAN}[1]${NC} Run onboarding (first-time setup)\n"
 printf "  ${CYAN}[2]${NC} Launch TUI (chat interface)\n"
 printf "  ${CYAN}[3]${NC} Exit (run manually later)\n\n"
 
-# Read from /dev/tty if stdin is piped
 if [ -t 0 ]; then
     read -p "  Choose [1-3] (default: 1): " choice
 else
