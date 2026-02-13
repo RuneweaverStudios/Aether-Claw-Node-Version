@@ -1,0 +1,33 @@
+{
+  "name": "aether-claw-node",
+  "version": "1.0.0",
+  "description": "Secure swarm-based AI assistant (Node.js) - runs on Windows and Mac",
+  "main": "src/index.js",
+  "bin": {
+    "aetherclaw": "src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/cli.js",
+    "tui": "node src/cli.js tui",
+    "onboard": "node src/cli.js onboard",
+    "status": "node src/cli.js status",
+    "chat": "node src/cli.js tui"
+  },
+  "keywords": [
+    "ai",
+    "assistant",
+    "openrouter",
+    "cli",
+    "cross-platform"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "axios": "^1.6.2",
+    "chalk": "^4.1.2",
+    "dotenv": "^16.3.1"
+  }
+}

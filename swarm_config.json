@@ -1,136 +1,18 @@
 {
   "version": "1.0.0",
-  "created": "2026-02-12",
   "system_name": "Aether-Claw",
   "model_routing": {
     "tier_1_reasoning": {
-      "endpoint": "http://localhost:8081",
-      "model": "minimax/minimax-m2.5",
-      "use_cases": [
-        "architectural_planning",
-        "skill_discovery",
-        "security_reviews",
-        "complex_reasoning",
-        "code_review"
-      ],
+      "model": "anthropic/claude-3.7-sonnet",
       "max_tokens": 4096,
       "temperature": 0.3
     },
     "tier_2_action": {
-      "endpoint": "http://localhost:8082",
-      "model": "google/gemini-2.5-flash-preview",
-      "use_cases": [
-        "boilerplate_generation",
-        "testing",
-        "documentation",
-        "simple_tasks",
-        "memory_indexing"
-      ],
+      "model": "anthropic/claude-3.7-haiku",
       "max_tokens": 2048,
       "temperature": 0.5
     }
   },
-  "safety_gate": {
-    "enabled": true,
-    "confirmation_required": {
-      "file_write": true,
-      "file_delete": true,
-      "network_request": true,
-      "system_command": true,
-      "skill_creation": true,
-      "skill_loading": true,
-      "git_operations": true,
-      "package_installation": true
-    },
-    "auto_approve": {
-      "file_read": true,
-      "git_status": true,
-      "memory_search": true,
-      "health_check": true
-    },
-    "timeout_seconds": 300,
-    "max_retries": 3
-  },
-  "swarm_orchestration": {
-    "max_workers": 3,
-    "isolation_mode": "docker",
-    "worktree_prefix": "aether-worker",
-    "resource_limits": {
-      "cpu_quota": 50000,
-      "memory_limit": "512m",
-      "network_enabled": false
-    },
-    "docker_config": {
-      "base_image": "python:3.11-slim",
-      "security_opts": [
-        "no-new-privileges"
-      ],
-      "read_only_root": false,
-      "capabilities_drop": [
-        "ALL"
-      ]
-    }
-  },
-  "kill_switch": {
-    "enabled": true,
-    "triggers": {
-      "unsigned_skill_execution": "immediate",
-      "signature_verification_failure": "immediate",
-      "unauthorized_file_access": "immediate",
-      "user_command_stop_swarm": "immediate",
-      "cpu_threshold_exceeded": {
-        "threshold": 80,
-        "duration_seconds": 60,
-        "action": "immediate"
-      },
-      "memory_threshold_exceeded": {
-        "threshold": 90,
-        "action": "immediate"
-      }
-    },
-    "recovery_mode": "manual"
-  },
-  "audit": {
-    "log_file": "brain/audit_log.md",
-    "log_level": "INFO",
-    "include_thinking_process": true,
-    "immutable": true,
-    "retention_days": 365
-  },
-  "brain": {
-    "directory": "brain",
-    "index_db": "brain/brain_index.db",
-    "files": {
-      "soul": "soul.md",
-      "user": "user.md",
-      "memory": "memory.md",
-      "heartbeat": "heartbeat.md",
-      "audit_log": "audit_log.md"
-    }
-  },
-  "skills": {
-    "directory": "skills",
-    "registry_file": "skills/registry.json",
-    "signature_required": true,
-    "scan_before_sign": true,
-    "scanner": "bandit",
-    "key_path": "~/.claude/secure/secure_key.pem",
-    "public_key_path": "~/.claude/secure/public_key.pem"
-  },
-  "heartbeat": {
-    "enabled": true,
-    "interval_minutes": 30,
-    "config_file": "brain/heartbeat.md",
-    "notification_library": "plyer"
-  },
-  "dashboard": {
-    "host": "localhost",
-    "port": 8501,
-    "refresh_seconds": 5
-  },
-  "logging": {
-    "level": "INFO",
-    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    "file": "aether_claw.log"
-  }
+  "safety_gate": { "enabled": true },
+  "brain": { "directory": "brain" }
 }
