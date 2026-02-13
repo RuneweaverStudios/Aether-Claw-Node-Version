@@ -410,6 +410,14 @@ async function cmdTui() {
   }
 }
 
+async function cmdTelegramSetup() {
+  const envPath = path.join(ROOT, '.env');
+  await setupTelegram(envPath, {
+    question: ttyQuestion,
+    questionMasked: ttyQuestionMasked
+  });
+}
+
 async function cmdTelegram() {
   require('dotenv').config({ path: path.join(ROOT, '.env') });
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -477,13 +485,18 @@ async function main() {
     await cmdTelegram();
     return;
   }
+  if (cmd === 'telegram-setup') {
+    await cmdTelegramSetup();
+    return;
+  }
 
   console.log('Aether-Claw (Node)');
-  console.log('  node src/cli.js onboard   - first-time setup');
-  console.log('  node src/cli.js tui       - chat TUI (gateway routing)');
-  console.log('  node src/cli.js telegram - start Telegram bot');
-  console.log('  node src/cli.js status   - status');
-  console.log('  node src/cli.js index    - index brain files (optional: <file>)');
+  console.log('  node src/cli.js onboard        - first-time setup');
+  console.log('  node src/cli.js telegram-setup - connect or reconnect Telegram bot only');
+  console.log('  node src/cli.js tui            - chat TUI (gateway routing)');
+  console.log('  node src/cli.js telegram      - start Telegram bot');
+  console.log('  node src/cli.js status        - status');
+  console.log('  node src/cli.js index         - index brain files (optional: <file>)');
 }
 
 main().catch((e) => {

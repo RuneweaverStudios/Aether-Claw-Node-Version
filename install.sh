@@ -109,17 +109,18 @@ if [ -d "$INSTALL_DIR" ]; then
         printf "  ${CYAN}[2]${NC} Reset credentials only (keep config & sessions)\n"
         printf "  ${CYAN}[3]${NC} Reset config only (keep credentials & sessions)\n"
         printf "  ${CYAN}[4]${NC} Reset sessions only (keep credentials & config)\n"
-        printf "  ${CYAN}[5]${NC} Update only (fresh code, keep all data)\n"
-        printf "  ${CYAN}[6]${NC} Cancel / Run existing installation\n"
+        printf "  ${CYAN}[5]${NC} Reset Telegram only (keep everything else, then connect new bot)\n"
+        printf "  ${CYAN}[6]${NC} Update only (fresh code, keep all data)\n"
+        printf "  ${CYAN}[7]${NC} Cancel / Run existing installation\n"
         printf "\n"
 
         if [ -t 0 ]; then
-            read -p "  Select option [1-6]: " choice
+            read -p "  Select option [1-7]: " choice
         else
-            read -p "  Select option [1-6]: " choice < /dev/tty
+            read -p "  Select option [1-7]: " choice < /dev/tty
         fi
 
-        choice=${choice:-6}
+        choice=${choice:-7}
 
         case "$choice" in
             1)
@@ -156,6 +157,18 @@ if [ -d "$INSTALL_DIR" ]; then
                 RESTORE_CONFIG=1
                 ;;
             5)
+                printf "\n${YELLOW}Resetting Telegram...${NC}\n"
+                if [ -f "$INSTALL_DIR/.env" ]; then
+                    grep -v "TELEGRAM_BOT_TOKEN" "$INSTALL_DIR/.env" 2>/dev/null | grep -v "TELEGRAM_CHAT_ID" > "$INSTALL_DIR/.env.tmp" 2>/dev/null || true
+                    [ -f "$INSTALL_DIR/.env.tmp" ] && mv "$INSTALL_DIR/.env.tmp" "$INSTALL_DIR/.env"
+                fi
+                printf "  Telegram configuration removed\n"
+                printf "\n${CYAN}Starting Telegram onboarding (connect a new bot)...${NC}\n\n"
+                cd "$INSTALL_DIR"
+                node src/cli.js telegram-setup < /dev/tty
+                exit 0
+                ;;
+            6)
                 printf "\n${YELLOW}Updating code only...${NC}\n"
                 [ -f "$INSTALL_DIR/.env" ] && cp "$INSTALL_DIR/.env" /tmp/aethernode-env-backup
                 [ -f "$INSTALL_DIR/swarm_config.json" ] && cp "$INSTALL_DIR/swarm_config.json" /tmp/aethernode-config-backup
@@ -167,7 +180,7 @@ if [ -d "$INSTALL_DIR" ]; then
                 RESTORE_BRAIN=1
                 RESTORE_SKILLS=1
                 ;;
-            6|*)
+            7|*)
                 printf "\n${CYAN}Using existing installation.${NC}\n\n"
                 cd "$INSTALL_DIR"
                 printf "${CYAN}╔════════════════════════════════════════════════════╗${NC}\n"
