@@ -96,6 +96,16 @@ function appendOrReplaceEnv(envPath, key, value) {
   fs.writeFileSync(envPath, content, 'utf8');
 }
 
+function hadTelegramBefore(envPath) {
+  if (!envPath || !fs.existsSync(envPath)) return false;
+  try {
+    const content = fs.readFileSync(envPath, 'utf8');
+    return /^\s*TELEGRAM_BOT_TOKEN\s*=/m.test(content) || /^\s*TELEGRAM_CHAT_ID\s*=/m.test(content);
+  } catch (e) {
+    return false;
+  }
+}
+
 /**
  * Run Telegram setup. ask(prompt, defaultVal), askMasked(prompt) are async.
  * Returns true if saved, false if skipped or failed.
@@ -103,12 +113,18 @@ function appendOrReplaceEnv(envPath, key, value) {
 async function setupTelegram(envPath, { question, questionMasked }) {
   console.log('\n  [4/5] 📱 Telegram Bot Setup');
   console.log('  ' + '─'.repeat(50));
-  console.log('  Connect Aether-Claw to Telegram:');
-  console.log('  • Chat with your agent from anywhere');
-  console.log('  • Receive notifications');
-  console.log('  • Control your agent remotely');
-  console.log('');
-  const doSetup = (await question('  Set up Telegram bot? [y/N]', 'n')).trim().toLowerCase();
+  const wasReset = hadTelegramBefore(envPath);
+  if (wasReset) {
+    console.log('  Telegram was reset. You can connect a new bot.\n');
+  } else {
+    console.log('  Connect Aether-Claw to Telegram:');
+    console.log('  • Chat with your agent from anywhere');
+    console.log('  • Receive notifications');
+    console.log('  • Control your agent remotely');
+    console.log('');
+  }
+  const prompt = wasReset ? '  Connect a new Telegram bot? [y/N]' : '  Set up Telegram bot? [y/N]';
+  const doSetup = (await question(prompt, 'n')).trim().toLowerCase();
   if (doSetup !== 'y') {
     console.log('  ℹ Telegram setup skipped\n');
     return false;
