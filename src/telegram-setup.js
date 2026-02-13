@@ -1,11 +1,15 @@
 /**
- * Telegram bot setup: ask for access token and chat ID (pairing), save to .env.
+ * Telegram bot setup: token + pairing code (send /start, reply with code from bot).
  */
 
 const fs = require('fs');
 const axios = require('axios');
 
 const TELEGRAM_API = 'https://api.telegram.org/bot';
+
+function generatePairingCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
 
 async function verifyBotToken(token) {
   try {
@@ -28,6 +32,56 @@ async function sendTelegramMessage(token, chatId, text) {
   } catch (e) {
     return false;
   }
+}
+
+async function waitForStart(token, timeoutMs = 300000) {
+  const step = 2000;
+  let offset = 0;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const url = offset ? `${TELEGRAM_API}${token}/getUpdates?offset=${offset}` : `${TELEGRAM_API}${token}/getUpdates`;
+      const { data } = await axios.get(url, { timeout: 15000 });
+      if (data.ok && Array.isArray(data.result)) {
+        for (const update of data.result) {
+          offset = update.update_id + 1;
+          const msg = update.message;
+          if (msg && msg.chat && (msg.text || '').trim() === '/start') {
+            return { chatId: String(msg.chat.id), userName: (msg.from && msg.from.first_name) || 'User' };
+          }
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    await new Promise((r) => setTimeout(r, step));
+  }
+  return null;
+}
+
+async function waitForPairingCode(token, chatId, code, timeoutMs = 300000) {
+  const step = 2000;
+  let offset = 0;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const url = offset ? `${TELEGRAM_API}${token}/getUpdates?offset=${offset}` : `${TELEGRAM_API}${token}/getUpdates`;
+      const { data } = await axios.get(url, { timeout: 15000 });
+      if (data.ok && Array.isArray(data.result)) {
+        for (const update of data.result) {
+          offset = update.update_id + 1;
+          const msg = update.message;
+          if (msg && String(msg.chat.id) === chatId && (msg.text || '').trim() === code) {
+            return true;
+          }
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    await new Promise((r) => setTimeout(r, step));
+  }
+  return false;
 }
 
 function appendOrReplaceEnv(envPath, key, value) {
@@ -53,7 +107,7 @@ function hadTelegramBefore(envPath) {
 }
 
 /**
- * Run Telegram setup: ask for access token and chat ID (pairing), save to .env.
+ * Run Telegram setup: token, then send /start to bot → bot sends pairing code → reply with code → save.
  * question(prompt, defaultVal), questionMasked(prompt) are async.
  * Options: { skipConnectPrompt: true } to skip "Connect? [y/N]" (e.g. when installer already asked).
  */
@@ -70,6 +124,15 @@ async function setupTelegram(envPath, { question, questionMasked }, options = {}
     }
     console.log('');
   }
+  console.log('  📋 Get a bot token from BotFather:');
+  console.log('  1. Open Telegram and search for @BotFather');
+  console.log('  2. Send /newbot to BotFather');
+  console.log('  3. Choose a name (e.g. "My Aether-Claw")');
+  console.log('  4. Choose a username (must end in "bot", e.g. my_aetherclaw_bot)');
+  console.log('  5. BotFather will give you a token.');
+  console.log('');
+  await question('  Press Enter when you have your bot token...', '');
+  console.log('');
   let token = '';
   while (!token) {
     token = (await questionMasked('  Enter bot token: ')).trim();
@@ -91,15 +154,32 @@ async function setupTelegram(envPath, { question, questionMasked }, options = {}
     token = '';
   }
   console.log('');
-  console.log('  Chat ID = your Telegram chat with the bot. Get it by:');
-  console.log('  • Send /start to your bot, then message @userinfobot, or');
-  console.log('  • curl "https://api.telegram.org/bot<TOKEN>/getUpdates" after messaging the bot');
+  console.log('  📋 Pair your bot:');
+  console.log('  1. Open Telegram and search for your bot');
+  console.log('  2. Send /start to your bot');
   console.log('');
-  let chatId = (await question('  Enter Chat ID (pairing): ', '')).trim();
-  if (!chatId) {
-    console.log('  ℹ Skipped. Set TELEGRAM_CHAT_ID in .env later.\n');
-    chatId = '';
+  console.log('  ⏳ Waiting for /start... (up to 5 min)');
+  const startResult = await waitForStart(token, 300000);
+  if (!startResult) {
+    console.log('\n  ✗ Timeout: did not receive /start. Send /start to your bot and try again.\n');
+    return false;
   }
+  const { chatId, userName } = startResult;
+  console.log('  ✓ Received /start from ' + userName);
+  const pairingCode = generatePairingCode();
+  const welcomeMsg = "👋 Hello! I'm Aether-Claw.\n\nTo complete pairing, **reply to this chat with this code:**\n\n`" + pairingCode + "`\n\n(Code expires in 5 min)";
+  if (await sendTelegramMessage(token, chatId, welcomeMsg)) {
+    console.log('  ✓ Sent pairing code to your bot');
+  }
+  console.log('\n  📝 Pairing code: ' + pairingCode);
+  console.log('  ⏳ Reply to your bot in Telegram with this code...');
+  const paired = await waitForPairingCode(token, chatId, pairingCode, 300000);
+  if (!paired) {
+    console.log('\n  ✗ Pairing failed: code not received or timeout.\n');
+    return false;
+  }
+  console.log('  ✓ Pairing code verified!');
+  await sendTelegramMessage(token, chatId, "✅ Pairing successful! I'm connected to your Aether-Claw.");
   console.log('\n  💾 Saving...');
   try {
     appendOrReplaceEnv(envPath, 'TELEGRAM_BOT_TOKEN', token);
@@ -107,7 +187,6 @@ async function setupTelegram(envPath, { question, questionMasked }, options = {}
     process.env.TELEGRAM_BOT_TOKEN = token;
     process.env.TELEGRAM_CHAT_ID = chatId;
     console.log('  ✓ Credentials saved to .env');
-    if (chatId) console.log('  ✓ Chat ID: ' + chatId);
     console.log('  💡 Start the bot: node src/cli.js telegram\n');
     return true;
   } catch (e) {
