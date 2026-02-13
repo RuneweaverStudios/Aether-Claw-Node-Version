@@ -79,15 +79,18 @@ gateway_prompt() {
   [ "$(uname -s)" != "Darwin" ] && return 0
   LAUNCH_AGENTS="${HOME}/Library/LaunchAgents"
   PLIST="$LAUNCH_AGENTS/com.aetherclaw.heartbeat.plist"
-  PYTHON=""
-  command -v python3 &>/dev/null && PYTHON="python3"
-  command -v python &>/dev/null && [ -z "$PYTHON" ] && PYTHON="python"
-  if [ -z "$PYTHON" ] || [ ! -f "$INSTALL_DIR/aether_claw.py" ]; then
+  NODE_EXE="$(command -v node)"
+  if [ -z "$NODE_EXE" ]; then
+    printf "  ${YELLOW}⚠${NC} node not in PATH; skip gateway daemon or install Node first.\n\n"
+    return 0
+  fi
+  if [ ! -f "$INSTALL_DIR/src/daemon.js" ]; then
+    printf "  ${YELLOW}⚠${NC} src/daemon.js not found; skip gateway daemon.\n\n"
     return 0
   fi
   GW_DID_ACTION=0
-  printf "${CYAN}🚪 Gateway daemon${NC} (runs background tasks)\n"
-  printf "  Memory index, skill checks, health checks\n\n"
+  printf "${CYAN}🚪 Gateway daemon${NC} (Node: heartbeat + Telegram bot)\n"
+  printf "  Memory index every 30 min; Telegram replies when configured\n\n"
   if [ -f "$PLIST" ]; then
     LOADED=false
     launchctl list 2>/dev/null | grep -q "com.aetherclaw.heartbeat" && LOADED=true
@@ -118,9 +121,8 @@ gateway_prompt() {
     <string>com.aetherclaw.heartbeat</string>
     <key>ProgramArguments</key>
     <array>
-        <string>$PYTHON</string>
-        <string>$INSTALL_DIR/aether_claw.py</string>
-        <string>heartbeat</string>
+        <string>$NODE_EXE</string>
+        <string>$INSTALL_DIR/src/daemon.js</string>
     </array>
     <key>WorkingDirectory</key>
     <string>$INSTALL_DIR</string>
@@ -157,9 +159,8 @@ PLISTEOF
     <string>com.aetherclaw.heartbeat</string>
     <key>ProgramArguments</key>
     <array>
-        <string>$PYTHON</string>
-        <string>$INSTALL_DIR/aether_claw.py</string>
-        <string>heartbeat</string>
+        <string>$NODE_EXE</string>
+        <string>$INSTALL_DIR/src/daemon.js</string>
     </array>
     <key>WorkingDirectory</key>
     <string>$INSTALL_DIR</string>
@@ -192,8 +193,8 @@ PLISTEOF
       printf "\n${CYAN}Launching TUI...${NC}\n\n"
       cd "$INSTALL_DIR" && node src/cli.js tui < /dev/tty
     elif [ "$launch_choice" = "2" ]; then
-      printf "\n${CYAN}Launching Web UI...${NC}\n\n"
-      cd "$INSTALL_DIR" && $PYTHON -m streamlit run dashboard.py --server.headless true 2>/dev/null || printf "  ${YELLOW}Run: $PYTHON -m streamlit run dashboard.py${NC}\n"
+      printf "\n${CYAN}Launching Web dashboard...${NC}\n\n"
+      cd "$INSTALL_DIR" && node src/cli.js dashboard
     fi
   fi
   printf "\n"

@@ -21,23 +21,23 @@ You have access to a GLM-4 API. Configure via environment variable:
 9. Update the PRD to set `passes: true` for the completed story
 10. Append your progress to `progress.txt`
 
-## Project Structure
+## Project Structure (Node-only)
 
 ```
-/Users/ghost/Desktop/newclaw/
 ├── brain/                    # Memory system
-│   ├── soul.md              # Identity and goals
-│   ├── user.md              # User preferences
-│   ├── memory.md            # Long-term memory log
-│   ├── heartbeat.md         # Proactive task config
-│   ├── audit_log.md         # Immutable audit trail
-│   └── brain_index.db       # SQLite index (generated)
-├── skills/                   # Signed skills registry
+│   ├── soul.md, user.md, memory.md, heartbeat.md, audit_log.md
+│   └── brain_index.json      # Index (generated)
+├── skills/                   # Signed skills (JSON)
 ├── swarm_config.json         # Main configuration
-├── brain_index.py            # Memory indexing utility
-├── safe_skill_creator.py     # Skill signing utility
-├── heartbeat_daemon.py       # Proactive task runner
-├── dashboard.py              # Streamlit dashboard
+├── src/
+│   ├── cli.js                # CLI: onboard, tui, telegram, daemon, dashboard
+│   ├── daemon.js             # Gateway daemon (heartbeat + Telegram)
+│   ├── dashboard.js          # Web dashboard (HTTP)
+│   ├── brain.js, api.js, config.js, gateway.js, personality.js
+│   ├── telegram-setup.js     # Telegram pairing
+│   ├── audit-logger.js, notifier.js, safety-gate.js, kill-switch.js
+│   ├── keygen.js, safe-skill-creator.js, skill-loader.js
+│   └── tasks/                # git-scanner, health-monitor, skill-checker
 └── prd.json                  # Ralph task list
 ```
 
@@ -63,13 +63,13 @@ The learnings section is critical - it helps future iterations avoid repeating m
 - Do NOT commit broken code
 - Keep changes focused and minimal
 - Follow existing code patterns
-- Use proper Python type hints and docstrings
+- Use existing Node.js patterns (this repo is Node-only; no Python).
 
 ## Key Security Requirements
 
 For this Aether-Claw project:
 1. All skill code must be cryptographically signed
-2. Use the `cryptography` library for RSA signing
+2. Use Node `crypto` (RSA) for signing; see `src/keygen.js`, `src/safe-skill-creator.js`
 3. Store keys securely in `~/.claude/secure/`
 4. Log all actions to `brain/audit_log.md`
 5. Validate all inputs before processing

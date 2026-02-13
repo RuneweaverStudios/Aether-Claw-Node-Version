@@ -11,7 +11,11 @@
     "tui": "node src/cli.js tui",
     "onboard": "node src/cli.js onboard",
     "status": "node src/cli.js status",
-    "chat": "node src/cli.js tui"
+    "chat": "node src/cli.js tui",
+    "daemon": "node src/daemon.js",
+    "dashboard": "node src/cli.js dashboard",
+    "doctor": "node src/cli.js doctor",
+    "telegram": "node src/cli.js telegram"
   },
   "keywords": [
     "ai",

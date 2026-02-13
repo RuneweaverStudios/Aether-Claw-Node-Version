@@ -12,6 +12,7 @@ const { indexAll, getBrainDir, searchMemory, readIndex, indexFile } = require('.
 const { routePrompt } = require('./gateway');
 const { isFirstRun, updateUserProfile, updateSoul } = require('./personality');
 const { setupTelegram, sendTelegramMessage } = require('./telegram-setup');
+const { listSkills: listSkillsFromLoader } = require('./safe-skill-creator');
 const axios = require('axios');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -204,18 +205,15 @@ async function cmdOnboard() {
   console.log('  [3] Exit (run manually later)\n');
   const hatch = (await ttyQuestion('  Choose [1-3] (default: 1)', '1')).trim();
   if (hatch === '2') {
-    console.log('\n  🐣 Launching Web UI...\n');
+    console.log('\n  🐣 Launching Web dashboard...\n');
     const { spawn } = require('child_process');
-    const dashPath = path.join(ROOT, 'dashboard.py');
-    const py = process.platform === 'win32' ? 'python' : 'python3';
-    const child = spawn(py, ['-m', 'streamlit', 'run', dashPath, '--server.headless', 'true'], {
+    const child = spawn(process.execPath, [path.join(ROOT, 'src', 'dashboard.js')], {
       cwd: ROOT,
       stdio: 'inherit'
     });
     child.on('error', (err) => {
-      console.log('  Could not start Web UI:', err.message);
-      console.log('  Install Python and run: ' + py + ' -m pip install streamlit');
-      console.log('  Then: ' + py + ' -m streamlit run dashboard.py\n');
+      console.log('  Could not start dashboard:', err.message);
+      console.log('  Run: node src/cli.js dashboard\n');
     });
     await new Promise((res) => child.on('close', res));
   } else if (hatch !== '3') {
@@ -224,13 +222,16 @@ async function cmdOnboard() {
   } else {
     console.log('\n  Run later:');
     console.log('    ' + chalk.cyan('node src/cli.js tui') + '       # Terminal chat');
-    console.log('    ' + chalk.cyan(pyCmd()) + '   # Web dashboard\n');
+    console.log('    ' + chalk.cyan('node src/cli.js dashboard') + '   # Web dashboard');
+    if (process.env.TELEGRAM_BOT_TOKEN) {
+      console.log('    ' + chalk.dim('Telegram runs with the gateway daemon (install.sh → gateway).'));
+    }
+    console.log('');
   }
 }
 
-function pyCmd() {
-  const py = process.platform === 'win32' ? 'python' : 'python3';
-  return py + ' -m streamlit run dashboard.py';
+function dashboardCmd() {
+  return 'node src/cli.js dashboard';
 }
 
 function cmdStatus() {
@@ -253,25 +254,7 @@ function cmdStatus() {
 }
 
 function listSkills(rootDir) {
-  const skillsDir = path.join(rootDir, 'skills');
-  const out = [];
-  try {
-    const names = fs.readdirSync(skillsDir);
-    for (const name of names) {
-      if (name.endsWith('.json')) {
-        try {
-          const raw = fs.readFileSync(path.join(skillsDir, name), 'utf8');
-          const skill = JSON.parse(raw);
-          out.push({ name: skill.metadata?.name || name, signed: !!skill.signature });
-        } catch (e) {
-          out.push({ name, signed: false });
-        }
-      }
-    }
-  } catch (e) {
-    if (e.code !== 'ENOENT') throw e;
-  }
-  return out;
+  return listSkillsFromLoader(path.join(rootDir, 'skills')).map((s) => ({ name: s.name, signed: s.signature_valid }));
 }
 
 async function runPersonalitySetup() {
@@ -342,7 +325,8 @@ async function cmdTui() {
       console.log('  /memory <query> - search brain memory');
       console.log('  /skills  - list skills');
       console.log('  /index   - reindex brain files');
-      console.log('  /clear   - clear chat context (display only)');
+      console.log('  /clear   - clear screen');
+      console.log('  /new, /reset - reset session (fresh context)');
       console.log('  /quit    - exit\n');
       continue;
     }
@@ -351,7 +335,11 @@ async function cmdTui() {
       continue;
     }
     if (input === '/clear') {
-      console.log(chalk.dim('  (New conversation context)\n'));
+      console.clear();
+      continue;
+    }
+    if (input === '/new' || input === '/reset') {
+      console.log(chalk.dim('  Session reset. Next message starts fresh.\n'));
       continue;
     }
     if (input === '/skills') {
@@ -490,12 +478,28 @@ async function main() {
     await cmdTelegramSetup();
     return;
   }
+  if (cmd === 'daemon') {
+    require('./daemon');
+    return;
+  }
+  if (cmd === 'dashboard') {
+    require('./dashboard');
+    return;
+  }
+  if (cmd === 'doctor') {
+    const { cmdDoctor } = require('./doctor');
+    cmdDoctor();
+    return;
+  }
 
   console.log('Aether-Claw (Node)');
   console.log('  node src/cli.js onboard        - first-time setup');
   console.log('  node src/cli.js telegram-setup - connect or reconnect Telegram bot only');
   console.log('  node src/cli.js tui            - chat TUI (gateway routing)');
-  console.log('  node src/cli.js telegram      - start Telegram bot');
+  console.log('  node src/cli.js telegram       - start Telegram bot only');
+  console.log('  node src/cli.js daemon         - gateway daemon (heartbeat + Telegram)');
+  console.log('  node src/cli.js dashboard      - web dashboard (status)');
+  console.log('  node src/cli.js doctor         - health check and suggestions');
   console.log('  node src/cli.js status        - status');
   console.log('  node src/cli.js index         - index brain files (optional: <file>)');
 }
