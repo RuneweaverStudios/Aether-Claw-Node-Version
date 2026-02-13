@@ -287,10 +287,11 @@ if [ -d "$INSTALL_DIR" ]; then
                     [ -f "$INSTALL_DIR/.env.tmp" ] && mv "$INSTALL_DIR/.env.tmp" "$INSTALL_DIR/.env"
                 fi
                 printf "  Telegram configuration removed\n\n"
+                printf "  Do you want to add a new Telegram bot? [y/N]: "
                 if [ -t 0 ]; then
-                    read -p "  Do you want to add a new Telegram bot? [y/N]: " tg_choice
+                    read tg_choice
                 else
-                    read -p "  Do you want to add a new Telegram bot? [y/N]: " tg_choice < /dev/tty
+                    read tg_choice < /dev/tty
                 fi
                 tg_choice=${tg_choice:-n}
                 if [ "$tg_choice" = "y" ] || [ "$tg_choice" = "Y" ]; then
