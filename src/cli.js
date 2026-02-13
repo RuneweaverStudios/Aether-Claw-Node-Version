@@ -103,6 +103,27 @@ async function cmdOnboard() {
 
   // [2/4] Model selection
   console.log('  [2/4] 🧠 Model selection');
+  console.log('  ' + '─'.repeat(50));
+  console.log('  PREMIUM REASONING:');
+  console.log('  [1] Claude 3.7 Sonnet    $3/$15/M  - Best overall');
+  console.log('  [2] Claude Opus 4.6      $5/$25/M  - Most powerful (1M ctx)');
+  console.log('  [3] GLM 5                $0.80/$2.56/M - Z.AI flagship');
+  console.log('  [4] Kimi K2.5            $0.45/$2.25/M - Visual coding');
+  console.log('  [5] MiniMax M2.5         $0.30/$1.20/M - Office & coding');
+  console.log('');
+  console.log('  BALANCED:');
+  console.log('  [6] Gemini 2.5 Pro       - Google\'s best');
+  console.log('  [7] GPT-4.1              - OpenAI flagship');
+  console.log('');
+  console.log('  FAST/BUDGET:');
+  console.log('  [8] Claude 3.7 Haiku     - Fast & cheap');
+  console.log('  [9] Gemini 2.5 Flash     - Fast & efficient');
+  console.log('  [0] DeepSeek V4          - Great value');
+  console.log('');
+  console.log('  SPECIAL:');
+  console.log('  [A] MiniMax M2-her (Pony) - Roleplay/chat');
+  console.log('  [B] Custom model (paste from openrouter.ai/models)');
+  console.log('');
   const MODELS = {
     '1': ['anthropic/claude-3.7-sonnet', '$3/$15/M'],
     '2': ['anthropic/claude-opus-4.6', '$5/$25/M'],
@@ -116,11 +137,7 @@ async function cmdOnboard() {
     '0': ['deepseek/deepseek-chat-v4', 'budget'],
     'A': ['minimax/minimax-m2-her', '$0.30/$1.20/M']
   };
-  console.log('  PREMIUM: [1] Claude 3.7 Sonnet  [2] Claude Opus 4.6  [3] GLM 5  [4] Kimi K2.5  [5] MiniMax M2.5');
-  console.log('  BALANCED: [6] Gemini 2.5 Pro  [7] GPT-4.1');
-  console.log('  FAST: [8] Haiku  [9] Gemini Flash  [0] DeepSeek V4  [A] MiniMax M2-her');
-  console.log('  [B] Custom (paste from openrouter.ai/models)\n');
-  let choice = (await ttyQuestion('  Select reasoning model [1-0,A,B]', '1')).trim().toUpperCase();
+  let choice = (await ttyQuestion('  Select model [1-0,A,B] (default: 1)', '1')).trim().toUpperCase();
   let reasoningModel, modelLabel;
   if (choice === 'B') {
     console.log('\n  Open https://openrouter.ai/models and paste the model ID.\n');
@@ -132,7 +149,8 @@ async function cmdOnboard() {
     modelLabel = info[1];
   }
   console.log('  ✓ Reasoning: ' + reasoningModel + ' (' + modelLabel + ')\n');
-  const actionChoice = (await ttyQuestion('  Action model (fast tasks) [8] Haiku [9] Flash [0] DeepSeek [Enter] same as above', '')).trim().toUpperCase();
+  console.log('  Action model (for fast tasks):');
+  const actionChoice = (await ttyQuestion('  [8] Haiku  [9] Flash  [0] DeepSeek  [Enter] Same as reasoning: ', '')).trim().toUpperCase();
   let actionModel;
   if (actionChoice && MODELS[actionChoice]) {
     actionModel = MODELS[actionChoice][0];
