@@ -261,62 +261,88 @@ def cmd_onboard(args):
     # Step 2: Model Selection
     print("\n[2/6] 🧠 Model Selection")
     print("-" * 50)
-    print("  Top OpenRouter Models (2026):")
+    print("  PREMIUM REASONING:")
+    print("  [1] Claude 3.7 Sonnet    $3/$15/M  - Best overall")
+    print("  [2] Claude Opus 4.6      $5/$25/M  - Most powerful (1M ctx)")
+    print("  [3] GLM 5                $0.80/$2.56/M - Z.AI flagship")
+    print("  [4] Kimi K2.5            $0.45/$2.25/M - Visual coding")
+    print("  [5] MiniMax M2.5         $0.30/$1.20/M - Office & coding")
     print()
-    print("  REASONING MODELS:")
-    print("  [1] Claude 3.7 Sonnet  - Best overall (recommended)")
-    print("  [2] Claude Opus 4      - Most powerful")
-    print("  [3] GLM 4.7            - Z.AI flagship")
-    print("  [4] Gemini 2.5 Pro     - Google's best")
-    print("  [5] GPT-4.1            - OpenAI flagship")
+    print("  BALANCED:")
+    print("  [6] Gemini 2.5 Pro       - Google's best")
+    print("  [7] GPT-4.1              - OpenAI flagship")
     print()
-    print("  FAST/CHEAP MODELS:")
-    print("  [6] Claude 3.7 Haiku   - Fast & cheap")
-    print("  [7] Gemini 2.5 Flash   - Fast & efficient")
-    print("  [8] DeepSeek V4        - Great value")
-    print("  [9] Custom model ID")
+    print("  FAST/BUDGET:")
+    print("  [8] Claude 3.7 Haiku     - Fast & cheap")
+    print("  [9] Gemini 2.5 Flash     - Fast & efficient")
+    print("  [0] DeepSeek V4          - Great value")
+    print()
+    print("  SPECIAL:")
+    print("  [A] MiniMax M2-her (Pony) - Roleplay/chat")
+    print("  [B] Custom model (paste from openrouter.ai/models)")
     print()
 
     try:
-        choice = input("  Select reasoning model [1-9] (default: 1): ").strip() or '1'
+        choice = input("  Select model [1-0,A,B] (default: 1): ").strip().upper() or '1'
     except EOFError:
         choice = '1'
         print("1")
 
     models = {
-        '1': 'anthropic/claude-3.7-sonnet',
-        '2': 'anthropic/claude-opus-4',
-        '3': 'z-ai/glm-4.7',
-        '4': 'google/gemini-2.5-pro-preview',
-        '5': 'openai/gpt-4.1',
-        '6': 'anthropic/claude-3.7-haiku',
-        '7': 'google/gemini-2.5-flash-preview',
-        '8': 'deepseek/deepseek-chat-v4',
+        '1': ('anthropic/claude-3.7-sonnet', '$3/$15/M'),
+        '2': ('anthropic/claude-opus-4.6', '$5/$25/M'),
+        '3': ('z-ai/glm-5', '$0.80/$2.56/M'),
+        '4': ('moonshotai/kimi-k2.5', '$0.45/$2.25/M'),
+        '5': ('minimax/minimax-m2.5', '$0.30/$1.20/M'),
+        '6': ('google/gemini-2.5-pro-preview', 'varies'),
+        '7': ('openai/gpt-4.1', 'varies'),
+        '8': ('anthropic/claude-3.7-haiku', '$0.80/$4/M'),
+        '9': ('google/gemini-2.5-flash-preview', 'varies'),
+        '0': ('deepseek/deepseek-chat-v4', 'budget'),
+        'A': ('minimax/minimax-m2-her', '$0.30/$1.20/M'),
     }
 
-    if choice == '9':
+    if choice == 'B':
+        print("\n  📋 Open https://openrouter.ai/models in your browser")
+        print("  Find your model and click the copy button, then paste here:")
+        print()
         try:
-            reasoning_model = input("  Enter model ID: ").strip()
+            reasoning_model = input("  Paste model ID: ").strip()
         except EOFError:
             reasoning_model = 'anthropic/claude-3.7-sonnet'
             print("anthropic/claude-3.7-sonnet")
         if not reasoning_model:
             reasoning_model = 'anthropic/claude-3.7-sonnet'
+        model_price = "(custom)"
     else:
-        reasoning_model = models.get(choice, 'anthropic/claude-3.7-sonnet')
+        model_info = models.get(choice, ('anthropic/claude-3.7-sonnet', '$3/$15/M'))
+        reasoning_model = model_info[0]
+        model_price = model_info[1]
 
-    print(f"\n  ✓ Reasoning model: {reasoning_model}")
+    print(f"\n  ✓ Selected: {reasoning_model} ({model_price})")
 
     # Action model
     print("\n  Action model (for fast tasks):")
-    print("  [1-5] Same as reasoning options")
-    print("  [6] Haiku (default)  [7] Flash  [8] DeepSeek")
+    print("  [8] Haiku  [9] Flash  [0] DeepSeek  [Enter] Same as reasoning")
     try:
-        action_choice = input("  Select [1-8] (default: 6 - Haiku): ").strip() or '6'
+        action_choice = input("  Select (default: same): ").strip().upper() or ''
     except EOFError:
-        action_choice = '6'
-        print("6")
-    action_model = models.get(action_choice, 'anthropic/claude-3.7-haiku')
+        action_choice = ''
+        print("")
+
+    if action_choice and action_choice in models:
+        action_model = models[action_choice][0]
+    elif action_choice and action_choice == 'B':
+        try:
+            action_model = input("  Paste model ID: ").strip()
+        except EOFError:
+            action_model = reasoning_model
+        if not action_model:
+            action_model = reasoning_model
+    else:
+        action_model = reasoning_model
+
+    print(f"  ✓ Action model: {action_model}")
     print(f"  ✓ Action model: {action_model}")
 
     # Save to config
