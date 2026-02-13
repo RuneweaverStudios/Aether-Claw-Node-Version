@@ -8,6 +8,7 @@ Unified command-line interface for Aether-Claw operations.
 import argparse
 import logging
 import sys
+import os
 from pathlib import Path
 
 # Configure logging
@@ -16,6 +17,31 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+def tty_input(prompt: str = "", default: str = "") -> str:
+    """
+    Get input from user, falling back to /dev/tty if stdin is exhausted.
+
+    Args:
+        prompt: The prompt to display
+        default: Default value if input is empty
+
+    Returns:
+        User input string
+    """
+    print(prompt, end='', flush=True)
+    try:
+        line = input()
+        return line.strip() if line.strip() else default
+    except EOFError:
+        # stdin exhausted, try /dev/tty
+        try:
+            with open('/dev/tty', 'r') as tty:
+                line = tty.readline()
+                return line.strip() if line.strip() else default
+        except Exception:
+            return default
 
 
 def cmd_index(args):
@@ -219,7 +245,7 @@ def cmd_onboard(args):
     if existing_key:
         masked = existing_key[:10] + '...' + existing_key[-4:] if len(existing_key) > 14 else '***'
         print(f"  Found API key: {masked}")
-        change = input("  Use different key? [y/N]: ").strip().lower()
+        change = tty_input("  Use different key? [y/N]: ", "n").lower()
         if change != 'y':
             print("  ✓ Using existing API key")
         else:
@@ -282,11 +308,7 @@ def cmd_onboard(args):
     print("  [B] Custom model (paste from openrouter.ai/models)")
     print()
 
-    try:
-        choice = input("  Select model [1-0,A,B] (default: 1): ").strip().upper() or '1'
-    except EOFError:
-        choice = '1'
-        print("1")
+    choice = tty_input("  Select model [1-0,A,B] (default: 1): ", "1").upper()
 
     models = {
         '1': ('anthropic/claude-3.7-sonnet', '$3/$15/M'),
@@ -306,13 +328,7 @@ def cmd_onboard(args):
         print("\n  📋 Open https://openrouter.ai/models in your browser")
         print("  Find your model and click the copy button, then paste here:")
         print()
-        try:
-            reasoning_model = input("  Paste model ID: ").strip()
-        except EOFError:
-            reasoning_model = 'anthropic/claude-3.7-sonnet'
-            print("anthropic/claude-3.7-sonnet")
-        if not reasoning_model:
-            reasoning_model = 'anthropic/claude-3.7-sonnet'
+        reasoning_model = tty_input("  Paste model ID: ", "anthropic/claude-3.7-sonnet")
         model_price = "(custom)"
     else:
         model_info = models.get(choice, ('anthropic/claude-3.7-sonnet', '$3/$15/M'))
@@ -324,19 +340,12 @@ def cmd_onboard(args):
     # Action model
     print("\n  Action model (for fast tasks):")
     print("  [8] Haiku  [9] Flash  [0] DeepSeek  [Enter] Same as reasoning")
-    try:
-        action_choice = input("  Select (default: same): ").strip().upper() or ''
-    except EOFError:
-        action_choice = ''
-        print("")
+    action_choice = tty_input("  Select (default: same): ", "").upper()
 
     if action_choice and action_choice in models:
         action_model = models[action_choice][0]
     elif action_choice and action_choice == 'B':
-        try:
-            action_model = input("  Paste model ID: ").strip()
-        except EOFError:
-            action_model = reasoning_model
+        action_model = tty_input("  Paste model ID: ", reasoning_model)
         if not action_model:
             action_model = reasoning_model
     else:
@@ -381,18 +390,23 @@ def cmd_onboard(args):
     # Step 4: Gateway Daemon
     print("\n[4/6] 🚪 Gateway Daemon")
     print("-" * 50)
+    print("  The gateway daemon runs heartbeat tasks in the background:")
+    print("  • Memory index updates")
+    print("  • Skill integrity checks")
+    print("  • System health monitoring")
+    print()
 
-    try:
-        start_daemon = input("  Start heartbeat daemon automatically? [Y/n]: ").strip().lower()
-    except EOFError:
-        start_daemon = ''
-        print("Y")
+    start_daemon = tty_input("  Install gateway daemon? [Y/n]: ", "y").lower()
     start_daemon = start_daemon != 'n'
 
     if start_daemon:
+        print()
+        print("  → Creating gateway daemon...")
+
         # Create launch agent for macOS
         launch_dir = Path.home() / 'Library' / 'LaunchAgents'
         launch_dir.mkdir(parents=True, exist_ok=True)
+        print("  ✓ Created LaunchAgents directory")
 
         plist_content = f'''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -410,6 +424,8 @@ def cmd_onboard(args):
     <true/>
     <key>KeepAlive</key>
     <true/>
+    <key>ThrottleInterval</key>
+    <integer>300</integer>
     <key>StandardOutPath</key>
     <string>/tmp/aetherclaw.log</string>
     <key>StandardErrorPath</key>
@@ -420,10 +436,26 @@ def cmd_onboard(args):
         plist_path = launch_dir / 'com.aetherclaw.heartbeat.plist'
         with open(plist_path, 'w') as f:
             f.write(plist_content)
-        print(f"  ✓ Gateway daemon configured")
-        print(f"    LaunchAgent: {plist_path}")
+        print("  ✓ Created LaunchAgent plist")
+
+        # Load the daemon
+        import subprocess
+        result = subprocess.run(
+            ['launchctl', 'unload', str(plist_path)],
+            capture_output=True
+        )
+        result = subprocess.run(
+            ['launchctl', 'load', str(plist_path)],
+            capture_output=True
+        )
+        if result.returncode == 0:
+            print("  ✓ Gateway daemon loaded and running")
+            print(f"    Log file: /tmp/aetherclaw.log")
+        else:
+            print("  ⚠ Could not auto-load daemon (may need manual start)")
+            print(f"    Run: launchctl load {plist_path}")
     else:
-        print("  ℹ Gateway daemon not configured")
+        print("  ℹ Gateway daemon skipped (run manually with: aetherclaw heartbeat)")
 
     # Step 5: Index Brain
     print("\n[5/6] 🧠 Memory Indexing")
@@ -470,18 +502,13 @@ def cmd_onboard(args):
     print("  [3] Exit to shell")
     print()
 
-    try:
-        hatch = input("  Choose [1-3] (default: 1): ").strip() or '1'
-    except EOFError:
-        hatch = '1'
-        print("1")
+    hatch = tty_input("  Choose [1-3] (default: 1): ", "1")
 
     if hatch == '1':
         print("\n  🐣 Hatching into TUI...")
-        import subprocess
         tui_path = Path(__file__).parent / 'tui.py'
-        # Use subprocess with proper stdin connection
-        subprocess.run([sys.executable, str(tui_path)], stdin=None)
+        # Use os.execv to replace current process with TUI
+        os.execv(sys.executable, [sys.executable, str(tui_path)])
     elif hatch == '2':
         print("\n  🐣 Launching Dashboard...")
         import subprocess
