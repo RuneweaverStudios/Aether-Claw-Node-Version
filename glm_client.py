@@ -47,12 +47,12 @@ class ModelConfig:
 # Using OpenRouter models - can be changed to Z.ai by setting base_url
 MODEL_CONFIGS = {
     ModelTier.TIER_1_REASONING: ModelConfig(
-        model="anthropic/claude-3.5-sonnet",
+        model="anthropic/claude-3.7-sonnet",
         max_tokens=4096,
         temperature=0.3
     ),
     ModelTier.TIER_2_ACTION: ModelConfig(
-        model="anthropic/claude-3.5-haiku",
+        model="anthropic/claude-3.7-haiku",
         max_tokens=2048,
         temperature=0.5
     )

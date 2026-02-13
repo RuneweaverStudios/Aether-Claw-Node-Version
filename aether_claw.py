@@ -261,39 +261,55 @@ def cmd_onboard(args):
     # Step 2: Model Selection
     print("\n[2/6] 🧠 Model Selection")
     print("-" * 50)
-    print("  Top OpenRouter Models:")
+    print("  Top OpenRouter Models (2026):")
     print()
-    print("  [1] Claude 3.5 Sonnet  - Best overall (recommended)")
-    print("  [2] Claude 3.5 Haiku   - Fast & cheap")
+    print("  [1] Claude 3.7 Sonnet  - Best overall (recommended)")
+    print("  [2] Claude 3.7 Haiku   - Fast & cheap")
     print("  [3] Gemini 2.5 Pro     - Google's best")
-    print("  [4] Gemini 2.0 Flash   - Fast & efficient")
-    print("  [5] GPT-4o             - OpenAI flagship")
-    print("  [6] DeepSeek V3        - Great value")
-    print("  [7] Custom model ID")
+    print("  [4] Gemini 2.5 Flash   - Fast & efficient")
+    print("  [5] GPT-4.1            - OpenAI flagship")
+    print("  [6] DeepSeek V4        - Great value")
+    print("  [7] Llama 4 Maverick   - Meta open source")
+    print("  [8] Custom model ID")
     print()
 
-    choice = input("  Select reasoning model [1-7] (default: 1): ").strip() or '1'
+    try:
+        choice = input("  Select reasoning model [1-8] (default: 1): ").strip() or '1'
+    except EOFError:
+        choice = '1'
+        print("1")
 
     models = {
-        '1': 'anthropic/claude-3.5-sonnet',
-        '2': 'anthropic/claude-3.5-haiku',
+        '1': 'anthropic/claude-3.7-sonnet',
+        '2': 'anthropic/claude-3.7-haiku',
         '3': 'google/gemini-2.5-pro-preview',
-        '4': 'google/gemini-2.0-flash-001',
-        '5': 'openai/gpt-4o',
-        '6': 'deepseek/deepseek-chat',
+        '4': 'google/gemini-2.5-flash-preview',
+        '5': 'openai/gpt-4.1',
+        '6': 'deepseek/deepseek-chat-v4',
+        '7': 'meta-llama/llama-4-maverick',
     }
 
-    if choice == '7':
-        reasoning_model = input("  Enter model ID: ").strip()
+    if choice == '8':
+        try:
+            reasoning_model = input("  Enter model ID: ").strip()
+        except EOFError:
+            reasoning_model = 'anthropic/claude-3.7-sonnet'
+            print("anthropic/claude-3.7-sonnet")
+        if not reasoning_model:
+            reasoning_model = 'anthropic/claude-3.7-sonnet'
     else:
-        reasoning_model = models.get(choice, 'anthropic/claude-3.5-sonnet')
+        reasoning_model = models.get(choice, 'anthropic/claude-3.7-sonnet')
 
     print(f"\n  ✓ Reasoning model: {reasoning_model}")
 
     # Action model
     print("\n  Action model (for fast tasks):")
-    action_choice = input("  Select [1-6] (default: 2 - Haiku): ").strip() or '2'
-    action_model = models.get(action_choice, 'anthropic/claude-3.5-haiku')
+    try:
+        action_choice = input("  Select [1-7] (default: 2 - Haiku): ").strip() or '2'
+    except EOFError:
+        action_choice = '2'
+        print("2")
+    action_model = models.get(action_choice, 'anthropic/claude-3.7-haiku')
     print(f"  ✓ Action model: {action_model}")
 
     # Save to config
@@ -332,7 +348,11 @@ def cmd_onboard(args):
     print("\n[4/6] 🚪 Gateway Daemon")
     print("-" * 50)
 
-    start_daemon = input("  Start heartbeat daemon automatically? [Y/n]: ").strip().lower()
+    try:
+        start_daemon = input("  Start heartbeat daemon automatically? [Y/n]: ").strip().lower()
+    except EOFError:
+        start_daemon = ''
+        print("Y")
     start_daemon = start_daemon != 'n'
 
     if start_daemon:
@@ -416,7 +436,11 @@ def cmd_onboard(args):
     print("  [3] Exit to shell")
     print()
 
-    hatch = input("  Choose [1-3] (default: 1): ").strip() or '1'
+    try:
+        hatch = input("  Choose [1-3] (default: 1): ").strip() or '1'
+    except EOFError:
+        hatch = '1'
+        print("1")
 
     if hatch == '1':
         print("\n  🐣 Hatching into TUI...")

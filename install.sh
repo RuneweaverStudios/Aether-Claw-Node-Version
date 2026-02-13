@@ -316,7 +316,5 @@ printf "\n${YELLOW}Next:${NC}\n"
 printf "  ${CYAN}aetherclaw onboard${NC}\n"
 printf "\n"
 
-# Run onboard directly
-printf "${DIM}Starting onboarding...${NC}\n\n"
-cd "$INSTALL_DIR"
-python3 aether_claw.py onboard
+# Run onboard in a new interactive shell so stdin works
+exec $SHELL -c "cd $INSTALL_DIR && python3 aether_claw.py onboard"
