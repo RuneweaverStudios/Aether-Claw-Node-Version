@@ -75,6 +75,130 @@ RESTORE_BRAIN=""
 RESTORE_SKILLS=""
 WIPE_CREDS_ONLY=""
 
+gateway_prompt() {
+  [ "$(uname -s)" != "Darwin" ] && return 0
+  LAUNCH_AGENTS="${HOME}/Library/LaunchAgents"
+  PLIST="$LAUNCH_AGENTS/com.aetherclaw.heartbeat.plist"
+  PYTHON=""
+  command -v python3 &>/dev/null && PYTHON="python3"
+  command -v python &>/dev/null && [ -z "$PYTHON" ] && PYTHON="python"
+  if [ -z "$PYTHON" ] || [ ! -f "$INSTALL_DIR/aether_claw.py" ]; then
+    return 0
+  fi
+  GW_DID_ACTION=0
+  printf "${CYAN}🚪 Gateway daemon${NC} (runs background tasks)\n"
+  printf "  Memory index, skill checks, health checks\n\n"
+  if [ -f "$PLIST" ]; then
+    LOADED=false
+    launchctl list 2>/dev/null | grep -q "com.aetherclaw.heartbeat" && LOADED=true
+    if [ "$LOADED" = true ]; then
+      printf "  Gateway daemon is ${GREEN}running${NC}.\n\n"
+    else
+      printf "  Gateway daemon is ${YELLOW}installed but not running${NC}.\n\n"
+    fi
+    printf "  [1] Restart   [2] Reinstall   [3] Skip\n\n"
+    if [ -t 0 ]; then
+      read -p "  Choose [1-3] (default: 3): " gw_choice
+    else
+      read -p "  Choose [1-3] (default: 3): " gw_choice < /dev/tty
+    fi
+    gw_choice=${gw_choice:-3}
+    if [ "$gw_choice" = "1" ]; then
+      launchctl unload "$PLIST" 2>/dev/null
+      launchctl load "$PLIST" 2>/dev/null && { printf "  ${GREEN}✓${NC} Gateway daemon restarted\n"; GW_DID_ACTION=1; } || printf "  ${YELLOW}⚠${NC} Could not restart\n"
+    elif [ "$gw_choice" = "2" ]; then
+      launchctl unload "$PLIST" 2>/dev/null
+      mkdir -p "$LAUNCH_AGENTS"
+      cat > "$PLIST" << PLISTEOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.aetherclaw.heartbeat</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$PYTHON</string>
+        <string>$INSTALL_DIR/aether_claw.py</string>
+        <string>heartbeat</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>$INSTALL_DIR</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>300</integer>
+    <key>StandardOutPath</key>
+    <string>/tmp/aetherclaw.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/aetherclaw.log</string>
+</dict>
+</plist>
+PLISTEOF
+      launchctl load "$PLIST" 2>/dev/null && { printf "  ${GREEN}✓${NC} Gateway daemon reinstalled and running\n"; GW_DID_ACTION=1; } || printf "  ${YELLOW}⚠${NC} Could not load daemon\n"
+    fi
+  else
+    if [ -t 0 ]; then
+      read -p "  Install gateway daemon? [Y/n]: " gw_install
+    else
+      read -p "  Install gateway daemon? [Y/n]: " gw_install < /dev/tty
+    fi
+    gw_install=${gw_install:-y}
+    if [ "$gw_install" = "y" ] || [ "$gw_install" = "Y" ]; then
+      mkdir -p "$LAUNCH_AGENTS"
+      cat > "$PLIST" << PLISTEOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.aetherclaw.heartbeat</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$PYTHON</string>
+        <string>$INSTALL_DIR/aether_claw.py</string>
+        <string>heartbeat</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>$INSTALL_DIR</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>300</integer>
+    <key>StandardOutPath</key>
+    <string>/tmp/aetherclaw.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/aetherclaw.log</string>
+</dict>
+</plist>
+PLISTEOF
+      launchctl load "$PLIST" 2>/dev/null && { printf "  ${GREEN}✓${NC} Gateway daemon installed and running\n"; GW_DID_ACTION=1; } || printf "  ${YELLOW}⚠${NC} Could not load daemon\n"
+    fi
+  fi
+  if [ "$GW_DID_ACTION" = "1" ]; then
+    printf "\n"
+    printf "  [1] Launch TUI (terminal chat)   [2] Launch Web UI   [3] Skip\n\n"
+    if [ -t 0 ]; then
+      read -p "  Choose [1-3] (default: 3): " launch_choice
+    else
+      read -p "  Choose [1-3] (default: 3): " launch_choice < /dev/tty
+    fi
+    launch_choice=${launch_choice:-3}
+    if [ "$launch_choice" = "1" ]; then
+      printf "\n${CYAN}Launching TUI...${NC}\n\n"
+      cd "$INSTALL_DIR" && node src/cli.js tui < /dev/tty
+    elif [ "$launch_choice" = "2" ]; then
+      printf "\n${CYAN}Launching Web UI...${NC}\n\n"
+      cd "$INSTALL_DIR" && $PYTHON -m streamlit run dashboard.py --server.headless true 2>/dev/null || printf "  ${YELLOW}Run: $PYTHON -m streamlit run dashboard.py${NC}\n"
+    fi
+  fi
+  printf "\n"
+}
+
 if [ -d "$INSTALL_DIR" ]; then
     # Detect existing data and show options
     printf "${YELLOW}Existing installation found at $INSTALL_DIR${NC}\n\n"
@@ -163,6 +287,7 @@ if [ -d "$INSTALL_DIR" ]; then
                     [ -f "$INSTALL_DIR/.env.tmp" ] && mv "$INSTALL_DIR/.env.tmp" "$INSTALL_DIR/.env"
                 fi
                 printf "  Telegram configuration removed\n\n"
+                gateway_prompt
                 if [ -t 0 ]; then
                     read -p "  Do you want to add a new Telegram bot? [y/N]: " tg_choice
                 else
@@ -196,6 +321,7 @@ if [ -d "$INSTALL_DIR" ]; then
             7|*)
                 printf "\n${CYAN}Using existing installation.${NC}\n\n"
                 cd "$INSTALL_DIR"
+                gateway_prompt
                 printf "${CYAN}╔════════════════════════════════════════════════════╗${NC}\n"
                 printf "${CYAN}║${NC}              ${YELLOW}Ready to get started?${NC}                  ${CYAN}║${NC}\n"
                 printf "${CYAN}╚════════════════════════════════════════════════════╝${NC}\n\n"
@@ -257,6 +383,9 @@ printf "${GREEN}✓${NC} Running npm install...\n"
 npm install --silent
 
 printf "\n${GREEN}✓ Installation complete.${NC}\n\n"
+
+# Gateway daemon (macOS): check / restart / reinstall
+gateway_prompt
 
 # Interactive prompt
 printf "${CYAN}╔════════════════════════════════════════════════════╗${NC}\n"
