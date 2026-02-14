@@ -258,8 +258,8 @@ async function cmdOnboard() {
     fs.writeFileSync(path.join(brainDir, 'user.md'), '# User\n\n- **Name**: [Your name]\n', 'utf8');
     fs.writeFileSync(path.join(brainDir, 'memory.md'), '# Memory\n\nLong-term memory log.\n', 'utf8');
     console.log('  ✓ Created brain/soul.md, user.md, memory.md\n');
+    seedBootstrapIfNeeded(ROOT);
   }
-  seedBootstrapIfNeeded(ROOT);
   const indexResults = indexAll(ROOT);
   console.log('  ✓ Indexed ' + Object.keys(indexResults).length + ' brain files\n');
 
