@@ -6,7 +6,7 @@
 const axios = require('axios');
 const path = require('path');
 const { loadConfig } = require('./config');
-const { resolveModelAndMaxTokens } = require('./api');
+const { resolveModelAndMaxTokens, stripToolCallLeakage } = require('./api');
 const { getKillSwitch } = require('./kill-switch');
 const { TOOL_DEFINITIONS, runTool } = require('./tools');
 
@@ -44,6 +44,7 @@ async function chatWithTools(messages, config, options = {}) {
       const { data } = await axios.post(`${OPENROUTER_BASE}/chat/completions`, body, { headers, timeout: 120000 });
       const msg = data.choices?.[0]?.message;
       if (!msg) throw new Error(data.error?.message || 'No message in response');
+      if (typeof msg.content === 'string') msg.content = stripToolCallLeakage(msg.content);
       return msg;
     } catch (e) {
       lastError = e;

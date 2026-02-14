@@ -2,6 +2,20 @@ const axios = require('axios');
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 
+/** Remove inline tool-call / function-call markup from LLM reply so only natural language is shown. */
+function stripToolCallLeakage(text) {
+  if (typeof text !== 'string') return text;
+  const lower = text.toLowerCase();
+  const idx1 = lower.indexOf('<|toolcall');
+  const idx2 = lower.indexOf('<|tool_call');
+  let idx = -1;
+  if (idx1 >= 0 && idx2 >= 0) idx = Math.min(idx1, idx2);
+  else if (idx1 >= 0) idx = idx1;
+  else if (idx2 >= 0) idx = idx2;
+  if (idx >= 0) return text.slice(0, idx).trim();
+  return text.trim();
+}
+
 function resolveModelAndMaxTokens(tier, config, modelOverride, maxTokensOverride) {
   let model = modelOverride;
   let max_tokens = maxTokensOverride ?? 4096;
@@ -52,8 +66,9 @@ async function callLLM(opts, config = null) {
         { model, messages, max_tokens },
         { headers, timeout: 120000 }
       );
-      const content = data.choices?.[0]?.message?.content;
+      let content = data.choices?.[0]?.message?.content;
       if (!content) throw new Error(data.error?.message || 'No response content');
+      content = stripToolCallLeakage(content);
       return content;
     } catch (e) {
       lastError = e;
@@ -65,4 +80,4 @@ async function callLLM(opts, config = null) {
   throw lastError || new Error('No response');
 }
 
-module.exports = { callLLM, resolveModelAndMaxTokens };
+module.exports = { callLLM, resolveModelAndMaxTokens, stripToolCallLeakage };

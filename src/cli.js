@@ -12,7 +12,7 @@ const { runAgentLoop } = require('./agent-loop');
 const { indexAll, getBrainDir, searchMemory, readIndex, indexFile } = require('./brain');
 const { routePrompt } = require('./gateway');
 const { isFirstRun, updateUserProfile, updateSoul, getBootstrapFirstMessage, getBootstrapContext, SCRIPTED_USER_WAKE_UP } = require('./personality');
-const { setupTelegram, sendTelegramMessage } = require('./telegram-setup');
+const { setupTelegram, sendTelegramMessage, sendChatAction } = require('./telegram-setup');
 const { buildSystemPromptWithSkills, listAllSkillsWithAuditStatus, listEligibleSkills } = require('./openclaw-skills');
 const axios = require('axios');
 
@@ -293,6 +293,14 @@ async function cmdOnboard() {
   console.log('  [3] Hatch in Telegram (connect bot)');
   console.log('  [4] Exit (run manually later)\n');
   const hatch = (await ttyQuestion('  Choose [1-4] (default: 1)', '1')).trim();
+  if (hatch !== '4') {
+    try {
+      const { ensureGatewayBeforeLaunch } = require('./gateway-install');
+      await ensureGatewayBeforeLaunch(ROOT, { ttyQuestion });
+    } catch (e) {
+      // do not block launch
+    }
+  }
   if (hatch === '2') {
     const { spawn } = require('child_process');
     const port = Number(process.env.PORT) || 8501;
@@ -545,7 +553,7 @@ async function cmdTelegram() {
   }
   const config = loadConfig(path.join(ROOT, 'swarm_config.json'));
   const model = config.model_routing?.tier_1_reasoning?.model || 'anthropic/claude-3.7-sonnet';
-  const baseSystemPrompt = 'You are Aether-Claw, a secure AI assistant. Be helpful and concise.';
+  const baseSystemPrompt = 'You are Aether-Claw, a secure AI assistant. Be helpful and concise. Reply only in natural language and markdown. Do not include raw tool-call or function-call syntax in your message.';
   const telegramChatsReceivedFirstReply = new Set();
   console.log('Telegram bot running. Press Ctrl+C to stop.\n');
   let offset = 0;
@@ -572,14 +580,22 @@ async function cmdTelegram() {
             } else if (/^\d{6}$/.test(text)) {
               out = 'Already paired. Send me a message to chat with me.';
             } else {
-              let systemPrompt = baseSystemPrompt;
-              if (firstRun) systemPrompt += getBootstrapContext(ROOT);
-              systemPrompt = buildSystemPromptWithSkills(systemPrompt, ROOT);
-              const reply = await callLLM(
-                { prompt: text, systemPrompt, model, max_tokens: 4096 },
-                config
-              );
-              out = (reply || '').slice(0, 4000);
+              await sendChatAction(token, chatId, 'typing');
+              const typingInterval = setInterval(() => {
+                sendChatAction(token, chatId, 'typing').catch(() => {});
+              }, 4000);
+              try {
+                let systemPrompt = baseSystemPrompt;
+                if (firstRun) systemPrompt += getBootstrapContext(ROOT);
+                systemPrompt = buildSystemPromptWithSkills(systemPrompt, ROOT);
+                const reply = await callLLM(
+                  { prompt: text, systemPrompt, model, max_tokens: 4096 },
+                  config
+                );
+                out = (reply || '').slice(0, 4000);
+              } finally {
+                clearInterval(typingInterval);
+              }
             }
             await sendTelegramMessage(token, chatId, out);
           } catch (e) {
