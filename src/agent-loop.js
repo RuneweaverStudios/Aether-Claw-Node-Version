@@ -67,15 +67,26 @@ async function chatWithTools(messages, config, options = {}) {
  * @param {string} userMessage - User prompt
  * @param {string} systemPrompt - System prompt for the agent
  * @param {Object} config - Swarm config (for model routing)
- * @param {{ tier?: string, maxIterations?: number }} options
+ * @param {{ tier?: string, maxIterations?: number, conversationHistory?: Array<{role:string,content:string}> }} options
  * @returns {{ reply: string, toolCallsCount?: number, error?: string }}
  */
+const MAX_HISTORY_MESSAGES = 20;
+
 async function runAgentLoop(workspaceRoot, userMessage, systemPrompt, config, options = {}) {
   const root = workspaceRoot || ROOT_DEFAULT;
   const maxIter = options.maxIterations ?? MAX_ITERATIONS;
 
   const messages = [];
   if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+  const history = options.conversationHistory;
+  if (Array.isArray(history) && history.length > 0) {
+    const capped = history.slice(-MAX_HISTORY_MESSAGES);
+    for (const m of capped) {
+      if (m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string') {
+        messages.push({ role: m.role, content: m.content });
+      }
+    }
+  }
   messages.push({ role: 'user', content: userMessage });
 
   let iterations = 0;
