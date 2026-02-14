@@ -2,6 +2,15 @@
 
 Skills are **OpenClaw-compatible** directories: each skill is a folder under `skills/` containing a **SKILL.md** file with YAML frontmatter and instructions. The agent sees the list of eligible skills in its system prompt and follows their instructions when relevant.
 
+## Bundled by default
+
+Aether-Claw includes two skills in the repo:
+
+- **cursor-agent** — Open projects in Cursor/VS Code; run the Cursor CLI for coding tasks (refactor, fix, review). Uses `open_in_editor` and `cursor_agent_run` tools. No extra deps.
+- **composio-twitter** — X/Twitter research via [Composio](https://composio.dev) (zero X API cost). Optional: requires [Bun](https://bun.sh) and `COMPOSIO_API_KEY`. See `skills/composio-twitter/README.md` for setup.
+
+Both are audited and appear in the Skills status during onboarding.
+
 ## Format
 
 - **Location**: `skills/<skill-name>/SKILL.md` (and optional supporting files in the same folder).

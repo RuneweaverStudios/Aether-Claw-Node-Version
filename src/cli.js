@@ -422,9 +422,11 @@ async function cmdOnboard() {
   const eligibleSkills = listEligibleSkills(ROOT);
   const missingCount = allSkills.length - eligibleSkills.length;
   openclawBox('Skills status', [
+    'Bundled by default: cursor-agent (open in Cursor / run Cursor CLI), composio-twitter (X/Twitter research via Composio)',
     'Eligible: ' + eligibleSkills.length,
     'Missing requirements: ' + Math.max(0, missingCount),
-    'Blocked by allowlist: 0'
+    'Blocked by allowlist: 0',
+    'More: skills/README.md or clawhub install <slug>'
   ]);
   console.log('│');
   openclawStep('Configure skills now? (recommended)');
