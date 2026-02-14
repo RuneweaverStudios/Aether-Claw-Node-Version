@@ -52,10 +52,21 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo ""
-printf "${BLUE}+--------------------------------------------------+${NC}\n"
-printf "${BLUE}|${NC} ${CYAN}      A E T H E R - C L A W   ( N O D E )       ${NC} ${BLUE}|${NC}\n"
-printf "${BLUE}|${NC} ${CYAN}   Cross-platform - Windows & Mac - OpenRouter   ${NC} ${BLUE}|${NC}\n"
-printf "${BLUE}+--------------------------------------------------+${NC}\n"
+printf "${BLUE}"
+printf "╔════════════════════════════════════════════════════╗\n"
+printf "║                A E T H E R C L A W                 ║\n"
+printf "║  ───────────────────────────────────────────────  ║\n"
+printf "║     Secure Swarm-Based Second Brain / Agent        ║\n"
+printf "║  Local • Cryptographically Signed Skills • Memory  ║\n"
+printf "╚════════════════════════════════════════════════════╝\n"
+printf "\n"
+printf "   █████╗ ███████╗████████╗██╗  ██╗███████╗██████╗ \n"
+printf "  ██╔══██╗██╔════╝╚══██╔══╝██║  ██║██╔════╝██╔══██╗\n"
+printf "  ███████║█████╗     ██║   ███████║█████╗  ██████╔╝\n"
+printf "  ██╔══██║██╔══╝     ██║   ██╔══██║██╔══╝  ██╔══██╗\n"
+printf "  ██║  ██║███████╗   ██║   ██║  ██║███████╗██║  ██║\n"
+printf "  ╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝\n"
+printf "${NC}\n"
 echo ""
 
 # Check Node.js

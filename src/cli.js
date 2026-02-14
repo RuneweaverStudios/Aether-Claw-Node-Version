@@ -21,6 +21,26 @@ const TELEGRAM_API = 'https://api.telegram.org/bot';
 
 const ONBOARD_STEPS_TOTAL = 5;
 
+const BANNER = `
+╔════════════════════════════════════════════════════╗
+║                A E T H E R C L A W                 ║
+║  ───────────────────────────────────────────────  ║
+║     Secure Swarm-Based Second Brain / Agent        ║
+║  Local • Cryptographically Signed Skills • Memory  ║
+╚════════════════════════════════════════════════════╝
+
+   █████╗ ███████╗████████╗██╗  ██╗███████╗██████╗ 
+  ██╔══██╗██╔════╝╚══██╔══╝██║  ██║██╔════╝██╔══██╗
+  ███████║█████╗     ██║   ███████║█████╗  ██████╔╝
+  ██╔══██║██╔══╝     ██║   ██╔══██║██╔══╝  ██╔══██╗
+  ██║  ██║███████╗   ██║   ██║  ██║███████╗██║  ██║
+  ╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝
+`;
+
+function printBanner(color = chalk.blue) {
+  console.log(color(BANNER));
+}
+
 function renderProgress(step, total, label) {
   const n = Math.min(step, total);
   const barLen = 10;
@@ -157,9 +177,8 @@ function ttyQuestionMasked(prompt) {
 }
 
 async function cmdOnboard() {
-  console.log('\n  ' + chalk.cyan('+--------------------------------------------------+'));
-  console.log('  ' + chalk.cyan('|') + '        🥚 AETHERCLAW ONBOARDING 🥚            ' + chalk.cyan('|'));
-  console.log('  ' + chalk.cyan('+--------------------------------------------------+') + '\n');
+  printBanner(chalk.cyan);
+  console.log(chalk.cyan('  🥚 ONBOARDING\n'));
 
   renderProgress(1, ONBOARD_STEPS_TOTAL, 'API Key');
   let key = process.env.OPENROUTER_API_KEY;
@@ -380,9 +399,7 @@ async function cmdTui() {
   const reasoningModel = config.model_routing?.tier_1_reasoning?.model || 'anthropic/claude-3.7-sonnet';
   const actionModel = config.model_routing?.tier_2_action?.model || 'anthropic/claude-3.7-haiku';
 
-  console.log(chalk.blue('\n+--------------------------------------------------+'));
-  console.log(chalk.blue('|') + '            A E T H E R   C L A W               ' + chalk.blue('|'));
-  console.log(chalk.blue('+--------------------------------------------------+') + '\n');
+  printBanner();
 
   if (isFirstRun(ROOT)) {
     console.log(chalk.cyan('Aether-Claw:\n') + BOOTSTRAP_FIRST_MESSAGE + '\n');
