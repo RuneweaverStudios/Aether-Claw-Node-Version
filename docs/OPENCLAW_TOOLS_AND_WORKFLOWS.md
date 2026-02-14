@@ -157,7 +157,6 @@ These tools are available in Aether-Claw and are not part of OpenClaw's built-in
 |------|---------|
 | **memory_append** | Append text to a brain file (e.g. memory.md) so the agent can "remember this for later". Gated by MEMORY_MODIFICATION. |
 | **memory_index** | Reindex brain so new content is searchable (call after memory_append to use new notes in memory_search). |
-| **skills_list** | List installed skills with name and signature_valid. |
 | **doctor** | Run health checks (config, env, daemon, skills); returns checks with ok, message, fix. |
 | **notify** | Send a desktop/system notification (title + message). Gated by NOTIFICATION. |
 | **datetime** | Current date, time, timezone (ISO + locale). |
@@ -176,12 +175,13 @@ These tools are available in Aether-Claw and are not part of OpenClaw's built-in
 | **env_get** | Read a safe env var (allowlist: NODE_ENV, LANG, etc.; never secrets). |
 | **run_tests** | Run npm test and return pass/fail summary. |
 | **lint** | Run eslint and return errors. |
-| **skill_invoke** | Stub (not implemented); skills_list available. |
 | **ralph_get_next_story** | (Better Ralph) Get next PRD story to implement (highest priority with passes: false) and Codebase Patterns from progress.txt. Returns all_complete when done. |
 | **ralph_mark_story_passed** | (Better Ralph) Set passes: true for a story id in prd.json after implementing it. |
 | **ralph_append_progress** | (Better Ralph) Append a progress entry (summary + learnings) to progress.txt with timestamp. |
 
 Safety: NOTIFICATION, AUDIT_READ, GIT_OPERATIONS, MEMORY_MODIFICATION are in the safety gate; tools respect kill switch where applicable.
+
+**Skills**: Aether-Claw uses OpenClaw-style skills (directories with SKILL.md under `skills/`). Eligible skills are injected into the system prompt; each skill is audited for security/prompt-injection before use (results cached). Install from ClawHub (`clawhub install <slug>`). See `skills/README.md` and the dashboard **Security** tab.
 
 ---
 

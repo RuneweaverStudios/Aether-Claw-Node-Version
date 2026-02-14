@@ -128,4 +128,31 @@ async function runGatewaySetup(installDir, opts = {}) {
   return { didAction: false };
 }
 
-module.exports = { runGatewaySetup, getPlistPath, isPlistLoaded };
+/**
+ * Ensure gateway is installed (prompt if missing) or restart if already installed.
+ * Used before launching any hatch option (TUI, Web UI, Telegram).
+ * @param {string} installDir - Project root
+ * @param {{ ttyQuestion: (q: string, def?: string) => Promise<string> }} opts
+ */
+async function ensureGatewayBeforeLaunch(installDir, opts = {}) {
+  if (process.platform !== 'darwin') return;
+  const daemonPath = path.join(installDir, 'src', 'daemon.js');
+  if (!fs.existsSync(daemonPath)) return;
+  const plistPath = getPlistPath();
+  const exists = plistPath && fs.existsSync(plistPath);
+  if (exists) {
+    unloadPlist();
+    writePlistAndLoad(installDir);
+    console.log('  ✓ Gateway daemon restarted.\n');
+    return;
+  }
+  const { ttyQuestion } = opts;
+  if (!ttyQuestion) return;
+  const install = (await ttyQuestion('  Install gateway daemon? [Y/n]: ', 'y')).trim().toLowerCase();
+  if (install === 'y' || install === '') {
+    writePlistAndLoad(installDir);
+    console.log('  ✓ Gateway daemon installed and running\n');
+  }
+}
+
+module.exports = { runGatewaySetup, ensureGatewayBeforeLaunch, getPlistPath, isPlistLoaded };

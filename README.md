@@ -30,7 +30,7 @@ node src/cli.js onboard
 |--------|-------------|
 | `node src/cli.js onboard` | First-time setup (API key, brain, optional Telegram) |
 | `node src/cli.js tui` | Chat TUI (gateway routing, tools for coding tasks) |
-| `node src/cli.js dashboard` | Web UI (Chat, Status, Config) at http://localhost:8501 |
+| `node src/cli.js dashboard` | Web UI (Chat, Status, Security, Config) at http://localhost:8501 |
 | `node src/cli.js status` | Show status (index, skills, config) |
 | `node src/cli.js doctor` | Health check and suggestions |
 | `node src/cli.js daemon` | Run gateway daemon (heartbeat + Telegram) in foreground |
@@ -56,6 +56,7 @@ BRAVE_API_KEY=optional (for web_search tool)
 - **Gateway routing**: Chat, action (coding), memory, reflect — each uses the right model and system prompt.
 - **Coding tasks**: For “action” messages, the agent uses tools: exec, process, read_file, write_file, edit, apply_patch, memory_search, memory_get, web_search, web_fetch, message (Telegram), cron, gateway, sessions, image (vision). See `docs/OPENCLAW_TOOLS_AND_WORKFLOWS.md`.
 - **Brain**: `brain/*.md` indexed for memory search; personality in soul.md / user.md.
+- **Skills**: OpenClaw-style (SKILL.md directories in `skills/`). Install from ClawHub (`clawhub install <slug>`). Each skill is audited for security/prompt-injection before use; results cached. Dashboard **Security** tab shows warnings and audit status.
 - **Safety**: Kill switch and safety gate (configurable) gate exec and file tools.
 - **Daemon**: Installer can register a LaunchAgent that runs `node src/daemon.js` (heartbeat + Telegram). Heartbeat interval is configurable in `swarm_config.json` (`heartbeat.interval_minutes`).
 
@@ -66,7 +67,7 @@ BRAVE_API_KEY=optional (for web_search tool)
 - `src/api.js` – OpenRouter API (with optional fallback models)
 - `src/agent-loop.js` – Tool-calling loop for action (coding) tasks
 - `src/tools/index.js` – All tools (exec, process, read_file, write_file, edit, apply_patch, memory_*, web_*, message, cron, gateway, sessions_*, agents_list, image; browser/canvas/nodes stubs)
-- `src/dashboard.js` – HTTP server: Chat API, Status, Config, Web UI (markdown + code blocks)
+- `src/dashboard.js` – HTTP server: Chat API, Status, Security, Config, Web UI (markdown + code blocks)
 - `src/config.js` – Config loader (swarm_config.json + defaults)
 - `src/brain.js` – Memory index (brain_index.json)
 - `src/daemon.js` – Heartbeat loop + Telegram (same process)

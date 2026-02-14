@@ -63,7 +63,7 @@ If you use **OpenClaw** or another OpenClaw-compatible assistant:
 
 Aether-Claw skills live in `skills/` and are signed JSON. To expose “Ralph” as a listed skill:
 
-1. Create a skill (e.g. with `safe-skill-creator.js`) that documents the Ralph workflow and points the user to `node src/cli.js ralph` and `better-ralph/README.md`.
+1. Create an OpenClaw-style skill (e.g. `skills/ralph/SKILL.md`) that documents the Ralph workflow and points the user to `node src/cli.js ralph` and `better-ralph/README.md`.
 2. Install the skill into `skills/` and list it with `node src/cli.js status` or TUI `/skills`.
 
 The actual loop and tools are in `src/ralph.js` and `src/tools/index.js` (ralph_get_next_story, ralph_mark_story_passed, ralph_append_progress); the skill is a wrapper or doc entry point.

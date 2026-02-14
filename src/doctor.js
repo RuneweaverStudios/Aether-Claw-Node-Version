@@ -8,7 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const { loadConfig } = require('./config');
 const { readIndex } = require('./brain');
-const { listSkills } = require('./safe-skill-creator');
+const { listAllSkillsWithAuditStatus, listEligibleSkills } = require('./openclaw-skills');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -102,16 +102,17 @@ function runChecks() {
     }
   }
 
-  // Skills integrity
+  // Skills (OpenClaw-style; audit status)
   try {
-    const skills = listSkills(path.join(ROOT, 'skills'));
-    const invalid = skills.filter((s) => s.is_signed && !s.signature_valid);
-    if (invalid.length > 0) {
-      results.push(check('Skills', false, `${invalid.length} invalid signature(s): ${invalid.map((s) => s.name).join(', ')}`, 'Review skills in skills/'));
-    } else if (skills.length === 0) {
+    const allSkills = listAllSkillsWithAuditStatus(ROOT);
+    const eligible = listEligibleSkills(ROOT);
+    const failed = allSkills.filter((s) => s.audit === 'failed');
+    if (failed.length > 0) {
+      results.push(check('Skills', false, `${failed.length} failed audit: ${failed.map((s) => s.name).join(', ')}`, 'Review skills in skills/ or Security tab'));
+    } else if (allSkills.length === 0) {
       results.push(check('Skills', true, 'None (optional)'));
     } else {
-      results.push(check('Skills', true, `${skills.length} skills, all valid`));
+      results.push(check('Skills', true, `${allSkills.length} skills, ${eligible.length} passed audit`));
     }
   } catch (e) {
     results.push(check('Skills', true, 'None or error (optional)'));

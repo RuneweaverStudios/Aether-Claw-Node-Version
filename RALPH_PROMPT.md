@@ -27,7 +27,7 @@ You have access to a GLM-4 API. Configure via environment variable:
 ├── brain/                    # Memory system
 │   ├── soul.md, user.md, memory.md, heartbeat.md, audit_log.md
 │   └── brain_index.json      # Index (generated)
-├── skills/                   # Signed skills (JSON)
+├── skills/                   # OpenClaw-style (SKILL.md per skill)
 ├── swarm_config.json         # Main configuration
 ├── src/
 │   ├── cli.js                # CLI: onboard, tui, telegram, daemon, dashboard
@@ -36,8 +36,8 @@ You have access to a GLM-4 API. Configure via environment variable:
 │   ├── brain.js, api.js, config.js, gateway.js, personality.js
 │   ├── telegram-setup.js     # Telegram pairing
 │   ├── audit-logger.js, notifier.js, safety-gate.js, kill-switch.js
-│   ├── keygen.js, safe-skill-creator.js, skill-loader.js
-│   └── tasks/                # git-scanner, health-monitor, skill-checker
+│   ├── openclaw-skills.js, skill-audit.js
+│   └── tasks/                # git-scanner, health-monitor
 └── prd.json                  # Ralph task list
 ```
 
@@ -68,8 +68,8 @@ The learnings section is critical - it helps future iterations avoid repeating m
 ## Key Security Requirements
 
 For this Aether-Claw project:
-1. All skill code must be cryptographically signed
-2. Use Node `crypto` (RSA) for signing; see `src/keygen.js`, `src/safe-skill-creator.js`
+1. Skills are OpenClaw-style (SKILL.md in `skills/`); security audit runs before use
+2. See `src/openclaw-skills.js`, `src/skill-audit.js`
 3. Store keys securely in `~/.claude/secure/`
 4. Log all actions to `brain/audit_log.md`
 5. Validate all inputs before processing

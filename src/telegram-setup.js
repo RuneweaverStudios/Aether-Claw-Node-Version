@@ -34,6 +34,19 @@ async function sendTelegramMessage(token, chatId, text) {
   }
 }
 
+async function sendChatAction(token, chatId, action) {
+  try {
+    const { data } = await axios.post(
+      `${TELEGRAM_API}${token}/sendChatAction`,
+      { chat_id: chatId, action },
+      { timeout: 5000 }
+    );
+    return data.ok === true;
+  } catch (e) {
+    return false;
+  }
+}
+
 async function waitForStart(token, timeoutMs = 300000) {
   const step = 2000;
   let offset = 0;
@@ -198,4 +211,4 @@ async function setupTelegram(envPath, { question, questionMasked }, options = {}
   }
 }
 
-module.exports = { setupTelegram, verifyBotToken, sendTelegramMessage };
+module.exports = { setupTelegram, verifyBotToken, sendTelegramMessage, sendChatAction };
