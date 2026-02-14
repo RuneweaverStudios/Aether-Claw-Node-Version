@@ -123,11 +123,13 @@ function listEligibleSkills(workspaceRoot) {
     const audit = ensureAudited(skillId, dir, root);
     if (!audit.safe) continue;
 
+    const skillMdPath = path.relative(root, path.join(dir, SKILL_MD));
     eligible.push({
       id: skillId,
       name: skillName,
       description: parsed.description || '',
       path: dir,
+      skillMdPath,
       instructions: parsed.body
     });
   }
@@ -167,18 +169,36 @@ function listAllSkillsWithAuditStatus(workspaceRoot) {
 }
 
 /**
- * Format eligible skills for injection into system prompt (compact XML-style list).
+ * Format eligible skills for injection into system prompt (OpenClaw-style).
+ * Uses <available_skills> with name, description, location = path to SKILL.md (relative to workspace for read_file).
  */
 function formatSkillsForPrompt(skills) {
   if (!skills || skills.length === 0) return '';
   const lines = skills.map(s => {
     const name = escapeXml(s.name);
     const desc = escapeXml((s.description || '').slice(0, 200));
-    const loc = escapeXml(s.path || s.id || '');
+    const loc = escapeXml(s.skillMdPath || s.path || s.id || '');
     return `<skill name="${name}" description="${desc}" location="${loc}">`;
   });
-  return '\n<skills>\n' + lines.join('\n') + '\n</skills>\n\n' +
-    'Use the above skills when relevant. Follow each skill\'s instructions when the user request matches that skill.\n';
+  return '\n<available_skills>\n' + lines.join('\n') + '\n</available_skills>\n\n' +
+    'Before replying: scan the <available_skills> entries above. ' +
+    'If exactly one skill clearly applies: read its SKILL.md at the given location with the read_file tool, then follow it. ' +
+    'If multiple could apply: choose the most specific one, then read and follow it. ' +
+    'If none clearly apply: do not read any SKILL.md.\n';
+}
+
+/**
+ * Build workspace skill snapshot (OpenClaw-style): prompt + resolved skills for env/cache.
+ * @param {string} workspaceRoot - Project root
+ * @param {{ version?: string }} opts - Optional version for cache invalidation
+ * @returns {{ prompt: string, skills: Array, resolvedSkills: Array, version: string }}
+ */
+function buildWorkspaceSkillSnapshot(workspaceRoot, opts = {}) {
+  const root = workspaceRoot || path.resolve(__dirname, '..');
+  const resolvedSkills = listEligibleSkills(root);
+  const prompt = formatSkillsForPrompt(resolvedSkills);
+  const version = opts.version || String(Date.now());
+  return { prompt, skills: resolvedSkills, resolvedSkills, version };
 }
 
 function escapeXml(s) {
@@ -191,13 +211,12 @@ function escapeXml(s) {
 }
 
 /**
- * Build system prompt with eligible skills appended.
+ * Build system prompt with eligible skills appended (uses snapshot for consistent format).
  */
 function buildSystemPromptWithSkills(basePrompt, workspaceRoot) {
-  const skills = listEligibleSkills(workspaceRoot);
-  const skillsBlock = formatSkillsForPrompt(skills);
+  const { prompt: skillsBlock } = buildWorkspaceSkillSnapshot(workspaceRoot);
   if (!skillsBlock) return basePrompt;
-  return basePrompt + '\n\n' + skillsBlock;
+  return basePrompt + '\n\n## Skills\n\n' + skillsBlock;
 }
 
 module.exports = {
@@ -205,6 +224,7 @@ module.exports = {
   listEligibleSkills,
   listAllSkillsWithAuditStatus,
   formatSkillsForPrompt,
+  buildWorkspaceSkillSnapshot,
   buildSystemPromptWithSkills,
   parseSkillMd,
   passesGating

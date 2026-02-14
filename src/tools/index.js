@@ -81,11 +81,11 @@ const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'read_file',
-      description: 'Read contents of a file in the project. Path is relative to project root.',
+      description: 'Read contents of a file in the project. Path is relative to project root (e.g. "src/index.js", "skills/github/SKILL.md"). Use this to load a skill\'s SKILL.md when the task matches that skill\'s description in the available_skills list.',
       parameters: {
         type: 'object',
         properties: {
-          path: { type: 'string', description: 'File path relative to project root (e.g. "src/index.js")' }
+          path: { type: 'string', description: 'File path relative to project root (e.g. src/index.js or skills/<skillname>/SKILL.md)' }
         },
         required: ['path']
       }
@@ -831,6 +831,10 @@ function pushSessionMessage(sessionKey, role, content) {
   sessionStore.set(sessionKey, list);
 }
 
+function clearSession(sessionKey) {
+  sessionStore.set(sessionKey, []);
+}
+
 function runSessionsList(args) {
   const limit = Math.min(50, args.limit || 20);
   const keys = Array.from(sessionStore.keys());
@@ -1359,5 +1363,6 @@ module.exports = {
   runMemorySearch,
   pushSessionMessage,
   getSessionHistory,
+  clearSession,
   SESSION_MAIN
 };

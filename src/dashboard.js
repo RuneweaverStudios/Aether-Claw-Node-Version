@@ -13,15 +13,8 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const ROOT = path.resolve(__dirname, '..');
 const { loadConfig } = require('./config');
 const { readIndex } = require('./brain');
-const { searchMemory } = require('./brain');
-const { buildSystemPromptWithSkills } = require('./openclaw-skills');
-const { routePrompt } = require('./gateway');
-const { runAgentLoop } = require('./agent-loop');
-const { isFirstRun, getBootstrapFirstMessage, getBootstrapContext } = require('./personality');
-
-const CHAT_SYSTEM = 'You are Aether-Claw, a secure AI assistant with memory and skills. Be helpful and concise.';
-const ACTION_SYSTEM = 'You are an expert programmer with access to tools: exec, process, read_file, write_file, create_directory, memory_search. Use these tools to run commands, read and write files, create folders, and search memory. To create a folder (e.g. on Desktop) use create_directory with path like ~/Desktop/foldername. Do not use fileoperations or createfolder—they do not exist. Only use tools from your tool list; never output raw FunctionCall or tool syntax in your message. Prefer running code and editing files via tools rather than only showing code in chat.';
-const REFLECT_SYSTEM = 'You are Aether-Claw. Help the user plan, break down problems, and think through options. Be structured and clear.';
+const { createReplyDispatcher, resolveSessionKey } = require('./gateway');
+const { isFirstRun, getBootstrapFirstMessage } = require('./personality');
 
 function getSystemStatus() {
   try {
@@ -105,6 +98,8 @@ function getSecurityData() {
   }
 }
 
+const replyDispatcher = createReplyDispatcher({ workspaceRoot: ROOT });
+
 async function handleChatMessage(message) {
   if (!message || typeof message !== 'string' || message.trim().length === 0) {
     return { error: 'Message is required' };
@@ -112,31 +107,11 @@ async function handleChatMessage(message) {
   if (!process.env.OPENROUTER_API_KEY) {
     return { error: 'OPENROUTER_API_KEY not set. Run: node src/cli.js onboard' };
   }
-  const config = loadConfig(path.join(ROOT, 'swarm_config.json'));
-  const { action, query } = routePrompt(message.trim());
-  let systemPrompt = CHAT_SYSTEM;
-  let tier = 'reasoning';
-  if (action === 'action') {
-    systemPrompt = ACTION_SYSTEM;
-    tier = 'action';
-  } else if (action === 'reflect') {
-    systemPrompt = REFLECT_SYSTEM;
-    tier = 'reasoning';
-  } else if (action === 'memory') {
-    const hits = searchMemory(query, ROOT, 5);
-    const memoryContext = hits.length
-      ? 'Relevant memory:\n' + hits.map((h) => h.file_name + ': ' + h.content.slice(0, 200)).join('\n\n')
-      : 'No matching memory.';
-    systemPrompt = CHAT_SYSTEM + '\n\n' + memoryContext;
-    tier = 'reasoning';
-  }
-  if (isFirstRun(ROOT)) systemPrompt += getBootstrapContext(ROOT);
-  systemPrompt = buildSystemPromptWithSkills(systemPrompt, ROOT);
-
+  const sessionKey = resolveSessionKey({ channel: 'dashboard' });
   try {
-    const result = await runAgentLoop(ROOT, query, systemPrompt, config, { tier, max_tokens: 4096 });
+    const result = await replyDispatcher(sessionKey, message.trim(), { channel: 'dashboard' });
     if (result.error && !result.reply) return { error: result.error };
-    return { reply: result.reply || '', action, toolCallsCount: result.toolCallsCount };
+    return { reply: result.reply || '', toolCallsCount: result.toolCallsCount };
   } catch (e) {
     return { error: e.message || String(e) };
   }

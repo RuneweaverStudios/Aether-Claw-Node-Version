@@ -11,11 +11,10 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const axios = require('axios');
 const { loadConfig } = require('./config');
-const { runAgentLoop } = require('./agent-loop');
-const { indexAll, getBrainDir } = require('./brain');
+const { indexAll } = require('./brain');
 const { sendTelegramMessage, sendChatAction } = require('./telegram-setup');
-const { isFirstRun, getBootstrapFirstMessage, getBootstrapContext } = require('./personality');
-const { buildSystemPromptWithSkills } = require('./openclaw-skills');
+const { isFirstRun, getBootstrapFirstMessage } = require('./personality');
+const { createReplyDispatcher, resolveSessionKey } = require('./gateway');
 
 const ROOT = path.resolve(__dirname, '..');
 const TELEGRAM_API = 'https://api.telegram.org/bot';
@@ -59,14 +58,13 @@ function runHeartbeatTasks() {
   } catch (e) {}
 }
 
-/** Telegram poll + reply loop (same logic as cli.js telegram). */
+/** Telegram poll + reply loop (OpenClaw-style: one reply dispatcher, agent loop with tools). */
 async function runTelegramLoop() {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const pairedChatId = process.env.TELEGRAM_CHAT_ID;
   if (!token) return;
 
-  const config = loadConfig(path.join(ROOT, 'swarm_config.json'));
-  const baseSystemPrompt = 'You are Aether-Claw, a secure AI assistant with tools (exec, read_file, write_file, create_directory, memory_search, etc.). Be helpful and concise. Use tools when needed; reply in natural language and markdown. Do not include raw tool-call or function-call syntax in your message.';
+  const replyDispatcher = createReplyDispatcher({ workspaceRoot: ROOT });
   const telegramChatsReceivedFirstReply = new Set();
 
   let offset = 0;
@@ -98,10 +96,8 @@ async function runTelegramLoop() {
                 sendChatAction(token, chatId, 'typing').catch(() => {});
               }, 4000);
               try {
-                let systemPrompt = baseSystemPrompt;
-                if (firstRun) systemPrompt += getBootstrapContext(ROOT);
-                systemPrompt = buildSystemPromptWithSkills(systemPrompt, ROOT);
-                const result = await runAgentLoop(ROOT, text, systemPrompt, config, { tier: 'action', max_tokens: 4096 });
+                const sessionKey = resolveSessionKey({ channel: 'telegram', chatId });
+                const result = await replyDispatcher(sessionKey, text, { channel: 'telegram', chatId });
                 out = (result.reply || result.error || '').slice(0, 4000);
               } finally {
                 clearInterval(typingInterval);

@@ -12,10 +12,10 @@ const { loadConfig } = require('./config');
 const { callLLM } = require('./api');
 const { runAgentLoop } = require('./agent-loop');
 const { indexAll, getBrainDir, searchMemory, readIndex, indexFile } = require('./brain');
-const { routePrompt } = require('./gateway');
+const { createReplyDispatcher, resolveSessionKey } = require('./gateway');
 const { isFirstRun, updateUserProfile, updateSoul, getBootstrapFirstMessage, getBootstrapContext, SCRIPTED_USER_WAKE_UP } = require('./personality');
 const { setupTelegram, sendTelegramMessage, sendChatAction } = require('./telegram-setup');
-const { buildSystemPromptWithSkills, listAllSkillsWithAuditStatus, listEligibleSkills } = require('./openclaw-skills');
+const { listAllSkillsWithAuditStatus, listEligibleSkills } = require('./openclaw-skills');
 const axios = require('axios');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -49,6 +49,33 @@ function renderProgress(step, total, label) {
   const filled = Math.round((n / total) * barLen);
   const bar = '[' + '='.repeat(filled) + '>'.repeat(filled < barLen ? 1 : 0) + ' '.repeat(barLen - filled - (filled < barLen ? 1 : 0)) + ']';
   console.log('\n  ' + chalk.cyan(bar) + ' ' + chalk.dim(n + '/' + total) + '  ' + chalk.bold(label) + '\n');
+}
+
+const BOX_W = 76;
+function openclawWrap(text, width) {
+  const w = width || BOX_W - 6;
+  const lines = [];
+  for (const line of String(text).split(/\n/)) {
+    let s = line;
+    while (s.length > w) { lines.push(s.slice(0, w)); s = s.slice(w); }
+    if (s.length) lines.push(s);
+  }
+  return lines;
+}
+function openclawBox(title, bodyLines) {
+  const t = '┌  ' + title + ' ' + '─'.repeat(Math.max(0, BOX_W - title.length - 6)) + '╮';
+  console.log(t);
+  for (const line of bodyLines) {
+    const p = (line + '').padEnd(BOX_W - 6).slice(0, BOX_W - 6);
+    console.log('│  ' + p + '  │');
+  }
+  console.log('├' + '─'.repeat(BOX_W - 2) + '╯');
+}
+function openclawStep(title) {
+  console.log('◇  ' + title + ' ' + '─'.repeat(Math.max(0, BOX_W - title.length - 6)) + '╮');
+}
+function openclawStepValue(value) {
+  console.log('│  ' + (value ?? ''));
 }
 
 const BOOTSTRAP_MD_CONTENT = `# BOOTSTRAP - First-run ritual
@@ -145,14 +172,62 @@ function ttyQuestionMasked(prompt) {
   });
 }
 
+const ONBOARD_SECURITY_BODY = `Security warning — please read.
+
+This bot can read files and run actions if tools are enabled.
+A bad prompt can trick it into doing unsafe things.
+
+If you're not comfortable with basic security and access control, don't run it.
+Recommended: pairing/allowlists, sandbox + least-privilege tools, keep secrets out of reach.
+Run regularly: node src/cli.js doctor`;
+
 async function cmdOnboard() {
-  printBanner(chalk.cyan);
-  console.log(chalk.cyan('  🥚 ONBOARDING\n'));
+  console.log(chalk.cyan('\n▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄'));
+  console.log(chalk.cyan('                  🦞 OPENCLAW 🦞                    \n'));
+  console.log('┌  OpenClaw onboarding');
+  console.log('│');
+  openclawStep('Security');
+  openclawBox('Security', openclawWrap(ONBOARD_SECURITY_BODY));
+  console.log('│');
+  openclawStep('I understand this is powerful and inherently risky. Continue?');
+  openclawStepValue('Yes');
+  console.log('│');
+  openclawStep('Onboarding mode');
+  openclawStepValue('Manual');
+  console.log('│');
+
+  const configPath = path.join(ROOT, 'swarm_config.json');
+  let config = {};
+  try { config = JSON.parse(fs.readFileSync(configPath, 'utf8')); } catch (_) {}
+  const hasConfig = fs.existsSync(configPath) && config.model_routing;
+  if (hasConfig) {
+    openclawStep('Existing config detected');
+    const workspaceDir = path.join(ROOT, config.brain?.directory || 'brain');
+    const reasoning = config.model_routing?.tier_1_reasoning?.model || '—';
+    openclawBox('Existing config detected', [
+      'workspace: ' + workspaceDir,
+      'model: ' + reasoning,
+      'gateway.mode: local',
+      'gateway.port: ' + (process.env.PORT || '8501')
+    ]);
+    console.log('│');
+    openclawStep('Config handling');
+    openclawStepValue('Update values');
+    console.log('│');
+  }
+  openclawStep('What do you want to set up?');
+  openclawStepValue('Local gateway (this machine)');
+  console.log('│');
+  openclawStep('Workspace directory');
+  openclawStepValue(ROOT);
+  console.log('│');
+  openclawStep('Model/auth provider');
+  openclawStepValue('OpenRouter (API key)');
+  console.log('│');
 
   renderProgress(1, ONBOARD_STEPS_TOTAL, 'API Key');
   let key = process.env.OPENROUTER_API_KEY;
   if (!key) {
-    console.log('  [1/6] 🔑 API Key');
     console.log('  Get your key at: https://openrouter.ai/keys');
     console.log('  (input is hidden; press Enter when done)\n');
     key = await ttyQuestionMasked('  Enter OpenRouter API key: ');
@@ -237,11 +312,6 @@ async function cmdOnboard() {
     actionModel = reasoningModel;
   }
   console.log('  ✓ Action: ' + actionModel + '\n');
-  const configPath = path.join(ROOT, 'swarm_config.json');
-  let config = {};
-  try {
-    config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  } catch (_) {}
   if (!config.model_routing) config.model_routing = {};
   if (!config.model_routing.tier_1_reasoning) config.model_routing.tier_1_reasoning = {};
   if (!config.model_routing.tier_2_action) config.model_routing.tier_2_action = {};
@@ -249,9 +319,33 @@ async function cmdOnboard() {
   config.model_routing.tier_2_action.model = actionModel;
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
   console.log('  ✓ Model config saved to swarm_config.json\n');
+  console.log('│');
+  openclawStep('Model configured');
+  openclawBox('Model configured', ['Default model set to ' + reasoningModel]);
+  console.log('│');
+  openclawStep('Default model');
+  openclawStepValue('Keep current (' + reasoningModel + ')');
+  console.log('│');
+  const gatewayPort = process.env.PORT || '8501';
+  openclawStep('Gateway port');
+  openclawStepValue(gatewayPort);
+  console.log('│');
+  openclawStep('Gateway bind');
+  openclawStepValue('Loopback (127.0.0.1)');
+  console.log('│');
+  openclawStep('Gateway auth');
+  openclawStepValue('Token');
+  console.log('│');
+  openclawStep('Tailscale exposure');
+  openclawStepValue('Off');
+  console.log('│');
+  openclawStep('Gateway token (blank to generate)');
+  openclawStepValue('(use OPENCLAW_GATEWAY_TOKEN or config)');
+  console.log('│');
 
   renderProgress(3, ONBOARD_STEPS_TOTAL, 'Brain');
-  console.log('  [3/6] 🧠 Brain');
+  openclawStep('Workspace OK / Brain');
+  console.log('│');
   const brainDir = getBrainDir(ROOT);
   if (!fs.existsSync(path.join(brainDir, 'soul.md'))) {
     fs.writeFileSync(path.join(brainDir, 'soul.md'), '# Soul\n\nAgent identity and goals.\n', 'utf8');
@@ -262,39 +356,156 @@ async function cmdOnboard() {
   }
   const indexResults = indexAll(ROOT);
   console.log('  ✓ Indexed ' + Object.keys(indexResults).length + ' brain files\n');
-
-  renderProgress(4, ONBOARD_STEPS_TOTAL, 'Telegram');
-  console.log('  [4/6] Telegram');
-  try {
-    await setupTelegram(path.join(ROOT, '.env'), {
-      question: ttyQuestion,
-      questionMasked: ttyQuestionMasked
-    });
-  } catch (e) {
-    console.log('  ⚠ Telegram setup skipped: ' + (e.message || e) + '\n');
+  console.log('│');
+  openclawStep('Channel status');
+  const tgConfigured = !!process.env.TELEGRAM_BOT_TOKEN;
+  openclawBox('Channel status', [
+    'Telegram: ' + (tgConfigured ? 'configured' : 'not configured'),
+    'WhatsApp: not configured',
+    'Discord: not configured',
+    'Slack: not configured',
+    'Others: install plugin to enable'
+  ]);
+  console.log('│');
+  openclawStep('Configure chat channels now?');
+  const doChannels = (await ttyQuestion('  Yes / No (default: Yes)', 'Yes')).trim().toLowerCase();
+  const configureChannels = doChannels === 'yes' || doChannels === 'y' || doChannels === '';
+  openclawStepValue(configureChannels ? 'Yes' : 'No');
+  console.log('│');
+  if (configureChannels) {
+    openclawStep('How channels work');
+    openclawBox('How channels work', openclawWrap(
+      'DM security: default is pairing; unknown DMs get a pairing code. Approve with: openclaw pairing approve <channel> <code>. Telegram: register a bot with @BotFather. Docs: https://docs.openclaw.ai/channels/telegram'
+    ));
+    console.log('│');
+    openclawStep('Select a channel');
+    const channelChoice = (await ttyQuestion('  [1] Telegram (Bot API)  [2] Finished (default: 1)', '1')).trim();
+    const wantTelegram = channelChoice === '1' || channelChoice === '';
+    openclawStepValue(wantTelegram ? 'Telegram (Bot API)' : 'Finished');
+    console.log('│');
+    if (wantTelegram) {
+      openclawStep('Telegram already configured. What do you want to do?');
+      const telegramAction = tgConfigured ? (await ttyQuestion('  [1] Modify settings  [2] Skip (default: 1)', '1')).trim() : '1';
+      openclawStepValue(telegramAction === '2' ? 'Skip' : 'Modify settings');
+      console.log('│');
+      if (telegramAction !== '2') {
+        renderProgress(4, ONBOARD_STEPS_TOTAL, 'Telegram');
+        openclawStep('Telegram token already configured. Keep it?');
+        const keepToken = tgConfigured ? (await ttyQuestion('  No / Yes (default: No)', 'No')).trim().toLowerCase() : 'no';
+        openclawStepValue(keepToken === 'yes' || keepToken === 'y' ? 'Yes' : 'No');
+        console.log('│');
+        try {
+          await setupTelegram(path.join(ROOT, '.env'), {
+            question: ttyQuestion,
+            questionMasked: ttyQuestionMasked
+          });
+        } catch (e) {
+          console.log('  ⚠ Telegram setup skipped: ' + (e.message || e) + '\n');
+        }
+      }
+      openclawStep('Select a channel');
+      openclawStepValue('Finished');
+      console.log('│');
+    }
+    openclawStep('Configure DM access policies now? (default: pairing)');
+    const doDm = (await ttyQuestion('  Yes / No (default: Yes)', 'Yes')).trim().toLowerCase();
+    openclawStepValue(doDm === 'yes' || doDm === 'y' || doDm === '' ? 'Yes' : 'No');
+    console.log('│');
+    openclawStep('Telegram DM policy');
+    openclawStepValue('Pairing (recommended)');
+    console.log('  Updated config / .env');
+    console.log('│');
   }
 
+  openclawStep('Skills status');
+  const allSkills = listAllSkillsWithAuditStatus(ROOT);
+  const eligibleSkills = listEligibleSkills(ROOT);
+  const missingCount = allSkills.length - eligibleSkills.length;
+  openclawBox('Skills status', [
+    'Eligible: ' + eligibleSkills.length,
+    'Missing requirements: ' + Math.max(0, missingCount),
+    'Blocked by allowlist: 0'
+  ]);
+  console.log('│');
+  openclawStep('Configure skills now? (recommended)');
+  const doSkills = (await ttyQuestion('  Yes / No (default: Yes)', 'Yes')).trim().toLowerCase();
+  openclawStepValue(doSkills === 'yes' || doSkills === 'y' || doSkills === '' ? 'Yes' : 'No');
+  console.log('│');
+  if (doSkills === 'yes' || doSkills === 'y' || doSkills === '') {
+    openclawStep('Preferred node manager for skill installs');
+    openclawStepValue('npm');
+    console.log('│');
+    openclawStep('Install missing skill dependencies');
+    openclawStepValue('Skip for now');
+    console.log('│');
+  }
+  openclawStep('Hooks');
+  openclawBox('Hooks', openclawWrap(
+    'Hooks let you automate actions when agent commands are issued. Example: Save session context when you issue /new. Learn more: https://docs.openclaw.ai/hooks'
+  ));
+  console.log('│');
+  openclawStep('Enable hooks?');
+  openclawStepValue('Skip for now');
+  console.log('│');
+
   renderProgress(5, ONBOARD_STEPS_TOTAL, 'Gateway');
-  console.log('  [5/6] 🚪 Gateway');
-  if (process.platform === 'darwin') {
+  openclawStep('Install Gateway service (recommended)');
+  const doGateway = (await ttyQuestion('  Yes / No (default: Yes)', 'Yes')).trim().toLowerCase();
+  openclawStepValue(doGateway === 'yes' || doGateway === 'y' || doGateway === '' ? 'Yes' : 'No');
+  console.log('│');
+  openclawStep('Gateway service runtime');
+  openclawStepValue('Node (recommended)');
+  console.log('│');
+  if (process.platform === 'darwin' && (doGateway === 'yes' || doGateway === 'y' || doGateway === '')) {
+    console.log('◒  Installing Gateway service…...');
     try {
       const { runGatewaySetup } = require('./gateway-install');
       await runGatewaySetup(ROOT, { ttyQuestion });
+      console.log('◇  Gateway service installed.');
     } catch (e) {
       console.log('  ⚠ Gateway setup skipped: ' + (e.message || e) + '\n');
     }
-  } else {
+  } else if (process.platform !== 'darwin') {
     console.log('  To run the gateway daemon: ' + chalk.cyan('node src/daemon.js') + '\n');
   }
+  console.log('│');
 
   renderProgress(6, ONBOARD_STEPS_TOTAL, 'Complete');
-  console.log('  [6/6] ✅ Onboarding complete.\n');
-  console.log('  ' + chalk.cyan('Ready to hatch!') + '\n');
-  console.log('  [1] Hatch into TUI (terminal chat)');
-  console.log('  [2] Hatch into Web UI (browser dashboard)');
-  console.log('  [3] Hatch in Telegram (connect bot)');
-  console.log('  [4] Exit (run manually later)\n');
-  const hatch = (await ttyQuestion('  Choose [1-4] (default: 1)', '1')).trim();
+  const port = Number(process.env.PORT) || 8501;
+  openclawStep('Status');
+  openclawBox('Status', [
+    'Telegram: ' + (process.env.TELEGRAM_BOT_TOKEN ? 'ok' : 'not configured'),
+    'Agents: main (default)',
+    'Heartbeat interval: 30m (main)',
+    'Web dashboard: http://127.0.0.1:' + port + '/'
+  ]);
+  console.log('│');
+  openclawStep('Optional apps');
+  openclawBox('Optional apps', [
+    'Add nodes for extra features:',
+    '- macOS app (system + notifications)',
+    '- iOS app (camera/canvas)',
+    '- Android app (camera/canvas)'
+  ]);
+  console.log('│');
+  openclawStep('Control UI');
+  openclawBox('Control UI', [
+    'Web UI: http://127.0.0.1:' + port + '/',
+    'Gateway: reachable',
+    'Docs: https://docs.openclaw.ai/web/control-ui'
+  ]);
+  console.log('│');
+  openclawStep('Token');
+  openclawBox('Token', openclawWrap(
+    'Gateway token: shared auth for the Gateway + Control UI. View token: openclaw config get gateway.auth.token. Open the dashboard anytime: node src/cli.js dashboard'
+  ));
+  console.log('│');
+  console.log('◆  How do you want to hatch your bot?');
+  console.log('│  ● Hatch in TUI (recommended)');
+  console.log('│  ○ Open the Web UI');
+  console.log('│  ○ Do this later\n');
+  const hatchChoice = (await ttyQuestion('  [1] TUI  [2] Web UI  [3] Later (default: 1)', '1')).trim();
+  const hatch = hatchChoice === '2' ? '2' : hatchChoice === '3' ? '4' : '1';
   if (hatch !== '4') {
     try {
       const { ensureGatewayBeforeLaunch } = require('./gateway-install');
@@ -435,11 +646,8 @@ async function cmdTui() {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   const ask = (prompt) => new Promise((res) => rl.question(prompt, res));
 
-  const CHAT_SYSTEM = `You are Aether-Claw, a secure AI assistant with memory and skills. Be helpful and concise.`;
-  const ACTION_SYSTEM = `You are an expert programmer with access to tools: exec, process, read_file, write_file, create_directory, memory_search. Use these tools to run commands, read and write files, create folders, and search memory. To create a folder (e.g. on Desktop) use create_directory with path like ~/Desktop/foldername. Do not use fileoperations or createfolder—they do not exist. Only use tools from your tool list; never output raw FunctionCall or tool syntax in your message. Prefer running code and editing files via tools rather than only showing code in chat. Use the conversation history for context: when the user says "the same project", "that folder", "the file we made", "Mai's folder", etc., use the paths or files mentioned earlier in the conversation.`;
-  const REFLECT_SYSTEM = `You are Aether-Claw. Help the user plan, break down problems, and think through options. Be structured and clear.`;
-
-  let sessionHistory = [];
+  const replyDispatcher = createReplyDispatcher({ workspaceRoot: ROOT });
+  const tuiSessionKey = resolveSessionKey({ channel: 'tui' });
 
   while (true) {
     const line = await ask(chalk.cyan('> '));
@@ -470,7 +678,8 @@ async function cmdTui() {
       continue;
     }
     if (input === '/new' || input === '/reset') {
-      sessionHistory = [];
+      const { clearSession } = require('./tools');
+      clearSession(tuiSessionKey);
       console.log(chalk.dim('  Session reset. Next message starts fresh.\n'));
       continue;
     }
@@ -498,38 +707,10 @@ async function cmdTui() {
       continue;
     }
 
-    const { action, query } = routePrompt(input);
-    let systemPrompt = CHAT_SYSTEM;
-    let tier = 'reasoning';
-    if (action === 'action') {
-      systemPrompt = ACTION_SYSTEM;
-      tier = 'action';
-    } else if (action === 'reflect') {
-      systemPrompt = REFLECT_SYSTEM;
-      tier = 'reasoning';
-    } else if (action === 'memory') {
-      const hits = searchMemory(query, ROOT, 5);
-      const memoryContext = hits.length
-        ? 'Relevant memory:\n' + hits.map((h) => h.file_name + ': ' + h.content.slice(0, 200)).join('\n\n')
-        : 'No matching memory.';
-      systemPrompt = CHAT_SYSTEM + '\n\n' + memoryContext;
-      tier = 'reasoning';
-    }
-    systemPrompt = systemPrompt + getBootstrapContext(ROOT);
-    systemPrompt = buildSystemPromptWithSkills(systemPrompt, ROOT);
-
-    const label = action === 'action' ? chalk.dim(' [action]') : action === 'memory' ? chalk.dim(' [memory]') : action === 'reflect' ? chalk.dim(' [plan]') : '';
-    console.log(chalk.dim('Thinking...') + label);
+    console.log(chalk.dim('Thinking...'));
     try {
-      const result = await runAgentLoop(ROOT, query, systemPrompt, config, {
-        tier,
-        max_tokens: 4096,
-        conversationHistory: sessionHistory
-      });
-      const reply = result.error ? result.error : result.reply;
-      sessionHistory.push({ role: 'user', content: query });
-      sessionHistory.push({ role: 'assistant', content: reply || '' });
-      if (sessionHistory.length > 20) sessionHistory = sessionHistory.slice(-20);
+      const result = await replyDispatcher(tuiSessionKey, input, { channel: 'tui' });
+      const reply = result.error && !result.reply ? result.error : (result.reply || '');
       if (result.toolCallsCount) console.log(chalk.dim('  (used ' + result.toolCallsCount + ' tool calls)\n'));
       console.log(chalk.green('\nAether-Claw:\n') + reply + '\n');
     } catch (e) {
