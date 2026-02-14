@@ -31,7 +31,7 @@ const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'exec',
-      description: 'Run a shell command in the project workspace. Use for running scripts, tests, and shell commands. Returns stdout and stderr. For long-running commands, consider running in background (background: true) and then use process tool to poll.',
+      description: 'Run a shell command in the project workspace. Use for running scripts, tests, and shell commands. Returns stdout and stderr. For long-running commands, consider running in background (background: true) and then use process tool to poll. For folders outside the project (e.g. Desktop), you can use create_directory with ~/Desktop/foldername, or exec with a command like: mkdir -p ~/Desktop/foldername.',
       parameters: {
         type: 'object',
         properties: {
@@ -104,6 +104,20 @@ const TOOL_DEFINITIONS = [
           content: { type: 'string', description: 'Content to write' }
         },
         required: ['path', 'content']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_directory',
+      description: 'Create a directory. Path can be relative to the project root (must stay inside workspace), or start with ~ for a path under your home (e.g. ~/Desktop/test). Creates parent directories as needed.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Directory path: relative to project root, or ~/... for home-relative (e.g. ~/Desktop/test)' }
+        },
+        required: ['path']
       }
     }
   },
@@ -424,6 +438,40 @@ function resolvePath(workspaceRoot, relativePath) {
   const real = path.resolve(p);
   if (!real.startsWith(path.resolve(workspaceRoot))) throw new Error('Path escapes workspace: ' + relativePath);
   return real;
+}
+
+function runCreateDirectory(workspaceRoot, args, context) {
+  const perm = checkPermission(ActionCategory.FILE_WRITE, null, workspaceRoot);
+  if (!perm.allowed) return { error: 'Permission denied: ' + (perm.confirmation_message || 'file_write') };
+  const raw = (args.path || '').trim();
+  if (!raw) return { error: 'path is required' };
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+  let resolved;
+  if (raw.startsWith('~/') || raw.startsWith('~\\') || raw === '~') {
+    if (!home) return { error: 'Home directory not available; use a path relative to project root.' };
+    const sub = raw === '~' ? '' : raw.slice(2).replace(/\\/g, path.sep);
+    resolved = path.resolve(home, sub);
+    const homeReal = path.resolve(home);
+    if (!resolved.startsWith(homeReal)) return { error: 'Path must stay under home directory.' };
+  } else if (raw.startsWith('$HOME') || raw.startsWith('%USERPROFILE%')) {
+    if (!home) return { error: 'Home directory not available.' };
+    const sub = raw.replace(/^\$HOME\/?/, '').replace(/^%USERPROFILE%\\?/, '').replace(/\\/g, path.sep);
+    resolved = path.resolve(home, sub);
+    const homeReal = path.resolve(home);
+    if (!resolved.startsWith(homeReal)) return { error: 'Path must stay under home directory.' };
+  } else {
+    try {
+      resolved = resolvePath(workspaceRoot, raw);
+    } catch (e) {
+      return { error: e.message };
+    }
+  }
+  try {
+    fs.mkdirSync(resolved, { recursive: true });
+    return { created: resolved };
+  } catch (e) {
+    return { error: e.message || 'Failed to create directory' };
+  }
 }
 
 function runExec(workspaceRoot, args, context) {
@@ -1243,6 +1291,8 @@ async function runTool(workspaceRoot, toolName, args, context = {}) {
       return runReadFile(root, args, ctx);
     case 'write_file':
       return runWriteFile(root, args, ctx);
+    case 'create_directory':
+      return runCreateDirectory(root, args, ctx);
     case 'delete_file':
       return runDeleteFile(root, args, ctx);
     case 'memory_search':
