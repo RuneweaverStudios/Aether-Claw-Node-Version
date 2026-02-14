@@ -183,7 +183,7 @@ async function cmdOnboard() {
   renderProgress(1, ONBOARD_STEPS_TOTAL, 'API Key');
   let key = process.env.OPENROUTER_API_KEY;
   if (!key) {
-    console.log('  [1/5] 🔑 API Key');
+    console.log('  [1/6] 🔑 API Key');
     console.log('  Get your key at: https://openrouter.ai/keys');
     console.log('  (input is hidden; press Enter when done)\n');
     key = await ttyQuestionMasked('  Enter OpenRouter API key: ');
@@ -205,12 +205,12 @@ async function cmdOnboard() {
       console.log('  ✓ API key saved to .env\n');
     }
   } else {
-    console.log('  [1/5] 🔑 API Key: found in environment\n');
+    console.log('  [1/6] 🔑 API Key: found in environment\n');
   }
 
   renderProgress(2, ONBOARD_STEPS_TOTAL, 'Model selection');
-  // [2/5] Model selection
-  console.log('  [2/5] 🧠 Model selection');
+  // [2/6] Model selection
+  console.log('  [2/6] 🧠 Model selection');
   console.log('  ' + '─'.repeat(50));
   console.log('  PREMIUM REASONING:');
   console.log('  [1] Claude 3.7 Sonnet    $3/$15/M  - Best overall');
@@ -294,8 +294,19 @@ async function cmdOnboard() {
   const indexResults = indexAll(ROOT);
   console.log('  ✓ Indexed ' + Object.keys(indexResults).length + ' brain files\n');
 
-  renderProgress(4, ONBOARD_STEPS_TOTAL, 'Gateway');
-  console.log('  [4/6] 🚪 Gateway');
+  renderProgress(4, ONBOARD_STEPS_TOTAL, 'Telegram');
+  console.log('  [4/6] Telegram');
+  try {
+    await setupTelegram(path.join(ROOT, '.env'), {
+      question: ttyQuestion,
+      questionMasked: ttyQuestionMasked
+    });
+  } catch (e) {
+    console.log('  ⚠ Telegram setup skipped: ' + (e.message || e) + '\n');
+  }
+
+  renderProgress(5, ONBOARD_STEPS_TOTAL, 'Gateway');
+  console.log('  [5/6] 🚪 Gateway');
   if (process.platform === 'darwin') {
     try {
       const { runGatewaySetup } = require('./gateway-install');
@@ -305,17 +316,6 @@ async function cmdOnboard() {
     }
   } else {
     console.log('  To run the gateway daemon: ' + chalk.cyan('node src/daemon.js') + '\n');
-  }
-
-  renderProgress(5, ONBOARD_STEPS_TOTAL, 'Telegram');
-  console.log('  [5/6] Telegram');
-  try {
-    await setupTelegram(path.join(ROOT, '.env'), {
-      question: ttyQuestion,
-      questionMasked: ttyQuestionMasked
-    });
-  } catch (e) {
-    console.log('  ⚠ Telegram setup skipped: ' + (e.message || e) + '\n');
   }
 
   renderProgress(6, ONBOARD_STEPS_TOTAL, 'Complete');
@@ -357,14 +357,19 @@ async function cmdOnboard() {
     await new Promise((res) => child.on('close', res));
   } else if (hatch === '3') {
     console.log('\n  🐣 Hatch in Telegram...\n');
-    try {
-      await setupTelegram(path.join(ROOT, '.env'), {
-        question: ttyQuestion,
-        questionMasked: ttyQuestionMasked
-      });
-      console.log('  Run the gateway daemon to receive Telegram messages: ' + chalk.cyan('node src/daemon.js') + '\n');
-    } catch (e) {
-      console.log('  ⚠ Telegram setup: ' + (e.message || e) + '\n');
+    require('dotenv').config({ path: path.join(ROOT, '.env') });
+    if (process.env.TELEGRAM_BOT_TOKEN) {
+      console.log('  Telegram is already connected. Run the gateway to receive messages: ' + chalk.cyan('node src/daemon.js') + '\n');
+    } else {
+      try {
+        await setupTelegram(path.join(ROOT, '.env'), {
+          question: ttyQuestion,
+          questionMasked: ttyQuestionMasked
+        });
+        console.log('  Run the gateway daemon to receive Telegram messages: ' + chalk.cyan('node src/daemon.js') + '\n');
+      } catch (e) {
+        console.log('  ⚠ Telegram setup: ' + (e.message || e) + '\n');
+      }
     }
   } else if (hatch !== '4') {
     console.log('\n  🐣 Hatching into TUI...\n');

@@ -407,11 +407,11 @@ npm install --silent
 
 printf "\n${GREEN}✓ Installation complete.${NC}\n\n"
 
-# Gateway daemon (macOS): install/restart before onboarding so gateway is before Telegram
-gateway_prompt
-
-# Fresh install: run onboarding (OpenRouter key, model, gateway step, Telegram, etc.)
+# Fresh install: run onboarding first (API key, model, brain, Telegram, Gateway)
 ensure_onboard
+
+# Gateway daemon (macOS): install/restart after onboarding so .env has Telegram
+gateway_prompt
 
 # Interactive prompt
 printf "${CYAN}╔════════════════════════════════════════════════════╗${NC}\n"
