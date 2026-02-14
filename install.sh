@@ -52,10 +52,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo ""
-printf "${BLUE}╔════════════════════════════════════════════════════╗${NC}\n"
-printf "${BLUE}║${NC} ${CYAN}           A E T H E R - C L A W   ( N O D E )           ${NC} ${BLUE}║${NC}\n"
-printf "${BLUE}║${NC}   Cross-platform • Windows & Mac • OpenRouter  ${NC} ${BLUE}║${NC}\n"
-printf "${BLUE}╚════════════════════════════════════════════════════╝${NC}\n"
+printf "${BLUE}+--------------------------------------------------+${NC}\n"
+printf "${BLUE}|${NC} ${CYAN}      A E T H E R - C L A W   ( N O D E )       ${NC} ${BLUE}|${NC}\n"
+printf "${BLUE}|${NC} ${CYAN}   Cross-platform - Windows & Mac - OpenRouter   ${NC} ${BLUE}|${NC}\n"
+printf "${BLUE}+--------------------------------------------------+${NC}\n"
 echo ""
 
 # Check Node.js
