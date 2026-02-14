@@ -207,10 +207,10 @@ async function cmdOnboard() {
     '3': ['z-ai/glm-5', '$0.80/$2.56/M'],
     '4': ['moonshotai/kimi-k2.5', '$0.45/$2.25/M'],
     '5': ['minimax/minimax-m2.5', '$0.30/$1.20/M'],
-    '6': ['google/gemini-2.5-pro-preview', 'varies'],
+    '6': ['google/gemini-2.5-pro', 'varies'],
     '7': ['openai/gpt-4.1', 'varies'],
     '8': ['anthropic/claude-3.7-haiku', '$0.80/$4/M'],
-    '9': ['google/gemini-2.5-flash-preview', 'varies'],
+    '9': ['google/gemini-2.5-flash', 'varies'],
     '0': ['deepseek/deepseek-chat-v4', 'budget'],
     'A': ['minimax/minimax-m2-her', '$0.30/$1.20/M']
   };

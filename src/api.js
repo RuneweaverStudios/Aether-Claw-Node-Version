@@ -9,11 +9,18 @@ function stripToolCallLeakage(text) {
   const idx1 = lower.indexOf('<|toolcall');
   const idx2 = lower.indexOf('<|tool_call');
   const idx3 = lower.indexOf('<functioncall');
+  const idx4 = lower.indexOf('<toolcall');
   let idx = -1;
-  for (const i of [idx1, idx2, idx3].filter((i) => i >= 0)) idx = idx < 0 ? i : Math.min(idx, i);
+  for (const i of [idx1, idx2, idx3, idx4].filter((i) => i >= 0)) idx = idx < 0 ? i : Math.min(idx, i);
   if (idx >= 0) return text.slice(0, idx).trim();
   return text.trim();
 }
+
+/** Map deprecated/invalid OpenRouter model IDs to current valid IDs. */
+const MODEL_ID_ALIASES = {
+  'google/gemini-2.5-flash-preview': 'google/gemini-2.5-flash',
+  'google/gemini-2.5-pro-preview': 'google/gemini-2.5-pro'
+};
 
 function resolveModelAndMaxTokens(tier, config, modelOverride, maxTokensOverride) {
   let model = modelOverride;
@@ -30,6 +37,7 @@ function resolveModelAndMaxTokens(tier, config, modelOverride, maxTokensOverride
     }
   }
   if (!model) model = 'anthropic/claude-3.7-sonnet';
+  if (model && MODEL_ID_ALIASES[model]) model = MODEL_ID_ALIASES[model];
   return { model, max_tokens, fallbacks };
 }
 
