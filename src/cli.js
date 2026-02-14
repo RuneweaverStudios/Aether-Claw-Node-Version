@@ -284,7 +284,7 @@ async function cmdOnboard() {
     '5': ['minimax/minimax-m2.5', '$0.30/$1.20/M'],
     '6': ['google/gemini-2.5-pro', 'varies'],
     '7': ['openai/gpt-4.1', 'varies'],
-    '8': ['anthropic/claude-3.7-haiku', '$0.80/$4/M'],
+    '8': ['anthropic/claude-3.5-haiku', '$0.80/$4/M'],
     '9': ['google/gemini-2.5-flash', 'varies'],
     '0': ['deepseek/deepseek-chat-v4', 'budget'],
     'A': ['minimax/minimax-m2-her', '$0.30/$1.20/M']
@@ -633,7 +633,7 @@ function cmdIndex(fileArg) {
 async function cmdTui() {
   const config = loadConfig(path.join(ROOT, 'swarm_config.json'));
   const reasoningModel = config.model_routing?.tier_1_reasoning?.model || 'anthropic/claude-3.7-sonnet';
-  const actionModel = config.model_routing?.tier_2_action?.model || 'anthropic/claude-3.7-haiku';
+  const actionModel = config.model_routing?.tier_2_action?.model || 'anthropic/claude-3.5-haiku';
 
   printBanner();
 

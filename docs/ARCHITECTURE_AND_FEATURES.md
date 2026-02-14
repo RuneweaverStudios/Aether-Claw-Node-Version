@@ -35,7 +35,7 @@ Both run inside a single Node process; no Python or subprocesses.
 - **OpenRouter** is the only LLM provider in the Node version. All chat and Telegram replies go through `src/api.js` → OpenRouter.
 - **Two tiers** (in `swarm_config.json`):
   - **tier_1_reasoning** – used for general chat, memory-aware replies, planning/reflect. Default e.g. `anthropic/claude-3.7-sonnet`.
-  - **tier_2_action** – used when the gateway classifies the user message as “action” (code, scripts, quick tasks). Default e.g. `anthropic/claude-3.7-haiku`.
+  - **tier_2_action** – used when the gateway classifies the user message as “action” (code, scripts, quick tasks). Default e.g. `anthropic/claude-3.5-haiku`.
 - **Gateway** (`src/gateway.js`) classifies each user message into:
   - **chat** → reasoning model, chat system prompt  
   - **action** → action model, action system prompt (code/tasks)  

@@ -412,6 +412,8 @@ const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'datetime', description: 'Get current date, time, and timezone.', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'list_dir', description: 'List directory contents (names and whether file or dir). Path relative to project root.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Directory path relative to project root (default .)' } }, required: [] } } },
   { type: 'function', function: { name: 'file_exists', description: 'Check if path exists and type (file, dir, or none).', parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } } },
+  { type: 'function', function: { name: 'open_in_editor', description: 'Open a folder in Cursor or VS Code. Use this when the user asks to open a project in an editor (e.g. "open newclawnode in vscode" or "open that folder in Cursor"). Path can be absolute or start with ~ (e.g. ~/Desktop/newclawnode). Tries Cursor first, then VS Code.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Folder path: absolute, or ~/Desktop/foldername, or relative to project root' } }, required: ['path'] } } },
+  { type: 'function', function: { name: 'cursor_agent_run', description: 'Run the Cursor CLI agent in non-interactive mode on a project. Use when the user wants Cursor to perform a coding task (refactor, fix bug, review, generate commit message, etc.) in a folder. Runs "agent -p \'<prompt>\' --output-format text" with optional --force. Requires Cursor CLI (agent) on PATH. If run hangs, the CLI may need a TTY (suggest tmux in that case).', parameters: { type: 'object', properties: { prompt: { type: 'string', description: 'Task for the Cursor agent (e.g. "Refactor src/utils.js for readability", "Fix the bug in api.js")' }, workdir: { type: 'string', description: 'Project directory relative to workspace root (default: .)' }, timeout_seconds: { type: 'number', description: 'Max seconds to wait (default 180)' }, force: { type: 'boolean', description: 'If true, pass --force to auto-apply changes without confirmation' } }, required: ['prompt'] } } },
   { type: 'function', function: { name: 'memory_append', description: 'Append text to a brain file (e.g. memory.md) so the agent can remember.', parameters: { type: 'object', properties: { file: { type: 'string', description: 'Brain file name (default memory.md)' }, content: { type: 'string' } }, required: ['content'] } } },
   { type: 'function', function: { name: 'memory_index', description: 'Reindex brain so new content is searchable.', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'audit_tail', description: 'Read last N entries from the audit log.', parameters: { type: 'object', properties: { limit: { type: 'number', description: 'Max entries (default 20)' } } } } },
@@ -950,6 +952,119 @@ function runFileExists(workspaceRoot, args) {
   }
 }
 
+/** Resolve folder path for open_in_editor: ~/..., absolute, or relative to workspace. */
+function resolveFolderPath(workspaceRoot, rawPath) {
+  const raw = (rawPath || '').trim();
+  if (!raw) return { error: 'path is required' };
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+  let resolved;
+  if (raw.startsWith('~/') || raw.startsWith('~\\') || raw === '~') {
+    if (!home) return { error: 'Home directory not available' };
+    const sub = raw === '~' ? '' : raw.slice(2).replace(/\\/g, path.sep);
+    resolved = path.resolve(home, sub);
+  } else if (path.isAbsolute(raw)) {
+    resolved = path.resolve(raw);
+  } else {
+    try {
+      resolved = resolvePath(workspaceRoot, raw);
+    } catch (e) {
+      return { error: e.message };
+    }
+  }
+  return { resolved };
+}
+
+function runOpenInEditor(workspaceRoot, args, context) {
+  const perm = checkPermission(ActionCategory.SYSTEM_COMMAND, null, workspaceRoot || ROOT_DEFAULT);
+  if (!perm.allowed) return { error: 'Permission denied: ' + (perm.confirmation_message || 'system_command') };
+  const r = resolveFolderPath(workspaceRoot || ROOT_DEFAULT, args.path);
+  if (r.error) return { error: r.error };
+  const dir = r.resolved;
+  try {
+    if (!fs.existsSync(dir)) return { error: 'Folder not found: ' + dir };
+    if (!fs.statSync(dir).isDirectory()) return { error: 'Not a directory: ' + dir };
+  } catch (e) {
+    return { error: e.message || 'Invalid path' };
+  }
+  const opts = { detached: true, stdio: 'ignore' };
+  const tryRun = (cmd, argv) => {
+    try {
+      spawn(cmd, argv, opts).unref();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+  if (tryRun('cursor', [dir])) return { opened: true, editor: 'cursor', path: dir };
+  if (tryRun('code', [dir])) return { opened: true, editor: 'vscode', path: dir };
+  if (process.platform === 'darwin') {
+    if (tryRun('open', ['-a', 'Cursor', dir])) return { opened: true, editor: 'cursor', path: dir };
+    if (tryRun('open', ['-a', 'Visual Studio Code', dir])) return { opened: true, editor: 'vscode', path: dir };
+  }
+  return {
+    error: 'Could not open in editor: cursor and code commands not found.',
+    path: dir,
+    hint: 'Open Cursor or VS Code, then use File → Open Folder and choose: ' + dir
+  };
+}
+
+/** Escape a string for safe use inside single-quoted shell argument. */
+function shellEscapeSingleQuoted(s) {
+  return "'" + String(s).replace(/'/g, "'\\''") + "'";
+}
+
+function runCursorAgentRun(workspaceRoot, args, context) {
+  const perm = checkPermission(ActionCategory.SYSTEM_COMMAND, null, workspaceRoot || ROOT_DEFAULT);
+  if (!perm.allowed) return { error: 'Permission denied: ' + (perm.confirmation_message || 'system_command') };
+  const root = workspaceRoot || ROOT_DEFAULT;
+  const workdir = args.workdir ? resolvePath(root, args.workdir) : root;
+  const timeoutSeconds = Math.min(600, Math.max(30, args.timeout_seconds || 180));
+  const prompt = (args.prompt || '').trim();
+  if (!prompt) return { error: 'prompt is required' };
+  const forceFlag = args.force === true ? ' --force' : '';
+  const agentCmd = shellEscapeSingleQuoted(prompt);
+  const buildCmd = (bin) => `${bin} -p ${agentCmd} --output-format text${forceFlag}`;
+  const tryRun = (bin) => {
+    try {
+      return execSync(buildCmd(bin), {
+        cwd: workdir,
+        encoding: 'utf8',
+        timeout: timeoutSeconds * 1000,
+        maxBuffer: 4 * 1024 * 1024
+      });
+    } catch (err) {
+      return { err };
+    }
+  };
+  const out = tryRun('agent');
+  if (typeof out === 'string') return { stdout: out.trim(), stderr: '', exitCode: 0, workdir };
+  if (out.err && (out.err.code === 'ENOENT' || (out.err.message && out.err.message.includes('spawn agent')))) {
+    const out2 = tryRun('cursor-agent');
+    if (typeof out2 === 'string') return { stdout: out2.trim(), stderr: '', exitCode: 0, workdir };
+  }
+  const e = out.err;
+  const stdout = e.stdout != null ? String(e.stdout) : '';
+  const stderr = e.stderr != null ? String(e.stderr) : '';
+  const timedOut = e.killed === true || (e.message && e.message.includes('ETIMEDOUT'));
+  const notFound = e.code === 'ENOENT' || (e.message && e.message.includes('spawn agent'));
+  let error = e.message || String(e);
+  let hint = '';
+  if (notFound) {
+    error = 'Cursor CLI (agent) not found on PATH.';
+    hint = 'Install: curl https://cursor.com/install -fsS | bash ; then run "agent login". Or use open_in_editor to open the project in Cursor and work there.';
+  } else if (timedOut) {
+    error = 'Cursor agent run timed out or hung.';
+    hint = 'The Cursor CLI often requires a real TTY when run from scripts. Try running in a terminal with tmux, or use open_in_editor to open the project in Cursor and run the task there.';
+  }
+  return {
+    stdout: stdout.trim(),
+    stderr: stderr.trim(),
+    exitCode: e.status ?? -1,
+    error,
+    hint: hint || undefined
+  };
+}
+
 function runMemoryAppend(workspaceRoot, args, context) {
   const perm = checkPermission(ActionCategory.MEMORY_MODIFICATION, null, workspaceRoot);
   if (!perm.allowed) return { error: 'Permission denied: memory_modification' };
@@ -1243,7 +1358,7 @@ function runRalphAppendProgress(workspaceRoot, args, context) {
 /**
  * Execute a single tool by name with parsed arguments. Async for network/Telegram/vision tools.
  * @param {string} workspaceRoot - Project root path
- * @param {string} toolName - Tool name (exec, process, read_file, write_file, memory_search, edit, apply_patch, memory_get, web_search, web_fetch, browser, canvas, nodes, message, cron, gateway, sessions_*, agents_list, image)
+ * @param {string} toolName - Tool name (exec, process, read_file, write_file, memory_search, edit, apply_patch, memory_get, web_search, web_fetch, browser, canvas, nodes, message, cron, gateway, sessions_*, agents_list, image, open_in_editor, ...)
  * @param {Object} args - Tool arguments (from LLM)
  * @param {Object} context - { config }
  * @returns {Promise<Object>} Result to send back to the model (will be JSON.stringify'd)
@@ -1314,6 +1429,10 @@ async function runTool(workspaceRoot, toolName, args, context = {}) {
       return runListDir(root, args);
     case 'file_exists':
       return runFileExists(root, args);
+    case 'open_in_editor':
+      return runOpenInEditor(root, args, ctx);
+    case 'cursor_agent_run':
+      return runCursorAgentRun(root, args, ctx);
     case 'memory_append':
       return runMemoryAppend(root, args, ctx);
     case 'memory_index':

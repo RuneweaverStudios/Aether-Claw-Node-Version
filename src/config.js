@@ -11,7 +11,7 @@ const DEFAULT_CONFIG = {
       temperature: 0.3
     },
     tier_2_action: {
-      model: 'anthropic/claude-3.7-haiku',
+      model: 'anthropic/claude-3.5-haiku',
       max_tokens: 2048,
       temperature: 0.5
     }

@@ -19,7 +19,8 @@ function stripToolCallLeakage(text) {
 /** Map deprecated/invalid OpenRouter model IDs to current valid IDs. */
 const MODEL_ID_ALIASES = {
   'google/gemini-2.5-flash-preview': 'google/gemini-2.5-flash',
-  'google/gemini-2.5-pro-preview': 'google/gemini-2.5-pro'
+  'google/gemini-2.5-pro-preview': 'google/gemini-2.5-pro',
+  'anthropic/claude-3.7-haiku': 'anthropic/claude-3.5-haiku'
 };
 
 function resolveModelAndMaxTokens(tier, config, modelOverride, maxTokensOverride) {
@@ -36,7 +37,7 @@ function resolveModelAndMaxTokens(tier, config, modelOverride, maxTokensOverride
       if (fb) fallbacks.push(...(Array.isArray(fb) ? fb : [fb]));
     }
   }
-  if (!model) model = 'anthropic/claude-3.7-sonnet';
+  if (!model) model = 'anthropic/claude-3.5-sonnet';
   if (model && MODEL_ID_ALIASES[model]) model = MODEL_ID_ALIASES[model];
   return { model, max_tokens, fallbacks };
 }

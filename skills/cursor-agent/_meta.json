@@ -1,0 +1,10 @@
+{
+  "owner": "aether-claw",
+  "slug": "cursor-agent",
+  "displayName": "Cursor Agent (Aether-Claw)",
+  "latest": {
+    "version": "1.0.0",
+    "publishedAt": null,
+    "note": "In-repo skill; improved and optimized from OpenClaw community cursor-agent"
+  }
+}

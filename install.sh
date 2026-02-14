@@ -410,6 +410,9 @@ fi
 printf "${GREEN}✓${NC} Running npm install...\n"
 npm install --silent
 
+# Ensure CLI is executable so 'aetherclaw' works when linked globally
+chmod +x src/cli.js 2>/dev/null || true
+
 # Link global command so 'aetherclaw' works from anywhere (unless --no-global)
 if [ -z "$NO_GLOBAL" ]; then
     printf "${GREEN}✓${NC} Linking global command: aetherclaw\n"
