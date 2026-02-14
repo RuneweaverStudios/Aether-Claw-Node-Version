@@ -121,10 +121,14 @@ function runChecks() {
   return results;
 }
 
-function cmdDoctor() {
+function cmdDoctor(opts = {}) {
   require('dotenv').config({ path: path.join(ROOT, '.env') });
-  console.log('\nAether-Claw Doctor\n');
   const results = runChecks();
+  if (opts.json) {
+    console.log(JSON.stringify({ checks: results, ok: results.every((r) => r.ok) }, null, 0));
+    return;
+  }
+  console.log('\nAether-Claw Doctor\n');
   let hasFail = false;
   for (const r of results) {
     const icon = r.ok ? '✓' : '✗';

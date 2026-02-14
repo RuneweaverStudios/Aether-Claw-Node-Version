@@ -122,6 +122,34 @@ For **action**-classified messages, the agent runs an **agent loop** with **27+ 
 
 ---
 
+## CLI commands (aetherclaw)
+
+The CLI is built with [Commander](https://github.com/tj/commander.js) (OpenClaw-style): global flags, subcommands, and per-command help.
+
+**Global flags:** `-V`, `--version` (print version); `--no-color` (disable ANSI colors); `--json` (machine-readable output for `status` and `doctor`). Use `aetherclaw <command> --help` for per-command options.
+
+Run `aetherclaw help` (or `aetherclaw` with no arguments, or `aetherclaw --help`) to see the full list. Current commands:
+
+| Command | Description |
+|--------|-------------|
+| `help` | Show all available commands |
+| `onboard`, `install` | First-time setup |
+| `telegram-setup` | Connect or reconnect Telegram bot only |
+| `tui` | Chat TUI (gateway routing) |
+| `telegram` | Start Telegram bot only |
+| `daemon` | Gateway daemon (heartbeat + Telegram) |
+| `dashboard` | Web dashboard |
+| `doctor` | Health check and suggestions |
+| `latest` | Update to latest from repo (keeps .env and config) |
+| `code [task]` | Plan then build (Cursor-style) |
+| `ralph [N]` | PRD-driven autonomous loop (Ralph-style) |
+| `status` | Status |
+| `index [file]` | Index brain files (optional: &lt;file&gt;) |
+| `config get &lt;key&gt;` | Get config value by dot path |
+| `config set &lt;key&gt; &lt;value&gt;` | Set config value (JSON or string) |
+
+---
+
 ## Comparison with OpenClaw
 
 [OpenClaw](https://github.com/openclaw/openclaw) is a full-featured personal AI assistant (Gateway WebSocket, multi-channel, Voice Wake, Canvas, companion apps). Aether-Claw Node is a **Node-only, minimal** variant with overlapping core capabilities:
@@ -147,3 +175,5 @@ For **action**-classified messages, the agent runs an **agent loop** with **27+ 
 | **Runtime** | Node ≥22 | Node ≥18 |
 
 Aether-Claw Node keeps the same **local-first, pairing, brain, skills, and daemon** ideas as OpenClaw while staying minimal and Node-only.
+
+**OpenClaw CLI (reference):** OpenClaw’s default CLI has many more top-level commands, including `setup`, `onboard`, `configure`, `config`, `doctor`, `gateway`, `channels`, `skills`, `plugins`, `memory`, `message`, `agent`, `agents`, `status`, `health`, `sessions`, `logs`, `models`, `cron`, `nodes`, `browser`, `hooks`, `webhooks`, `pairing`, `docs`, `dns`, `tui`, `dashboard`, `reset`, `uninstall`, `update`, `security`, `sandbox`, `approvals`, and plugin commands (e.g. `voicecall`). See [OpenClaw CLI reference](https://docs.openclaw.ai/cli).

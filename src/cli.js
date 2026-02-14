@@ -5,9 +5,17 @@ const fs = require('fs');
 const os = require('os');
 const readline = require('readline');
 const { execSync } = require('child_process');
+
+// Global flags (OpenClaw-style): apply before chalk so colors are disabled when requested
+if (process.argv.includes('--no-color')) {
+  process.env.NO_COLOR = '1';
+  process.env.FORCE_COLOR = '0';
+}
+
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const chalk = require('chalk');
+const { program } = require('commander');
 const crypto = require('crypto');
 const { loadConfig, writeConfig } = require('./config');
 const { callLLM } = require('./api');
@@ -678,12 +686,25 @@ function dashboardCmd() {
   return 'aetherclaw dashboard';
 }
 
-function cmdStatus() {
+function cmdStatus(opts = {}) {
   const config = loadConfig(path.join(ROOT, 'swarm_config.json'));
   const index = readIndex(ROOT);
   const fileCount = Object.keys(index.files || {}).length;
   const allSkills = listAllSkillsWithAuditStatus(ROOT);
   const eligible = listEligibleSkills(ROOT);
+  if (opts.json) {
+    console.log(JSON.stringify({
+      version: config.version,
+      brain: path.join(ROOT, 'brain'),
+      indexedFiles: fileCount,
+      skillsTotal: allSkills.length,
+      skillsEligible: eligible.length,
+      safetyGate: config.safety_gate?.enabled ?? true,
+      reasoningModel: config.model_routing?.tier_1_reasoning?.model,
+      actionModel: config.model_routing?.tier_2_action?.model
+    }, null, 0));
+    return;
+  }
   console.log(chalk.cyan('\nAether-Claw Status'));
   console.log('─'.repeat(50));
   console.log('Version: ', config.version);
@@ -900,12 +921,12 @@ async function cmdTelegram() {
  * Usage: code [--plan-only] [--no-plan] [task]
  * Task from argv, or TTY prompt, or stdin.
  */
-async function cmdCode() {
+async function cmdCode(taskArg, opts = {}) {
+  const planOnly = opts.planOnly || process.argv.includes('--plan-only');
+  const noPlan = opts.noPlan === true || process.argv.includes('--no-plan');
   const argv = process.argv.slice(2);
-  const planOnly = argv.includes('--plan-only');
-  const noPlan = argv.includes('--no-plan');
-  const rest = argv.filter((a) => a !== '--plan-only' && a !== '--no-plan');
-  let task = rest.length ? rest.join(' ').trim() : '';
+  const rest = argv.filter((a) => a !== '--plan-only' && a !== '--no-plan' && a !== 'code');
+  let task = typeof taskArg === 'string' && taskArg.trim() ? taskArg.trim() : (rest.length ? rest.join(' ').trim() : '');
 
   if (!task) {
     if (process.stdin.isTTY) {
@@ -965,11 +986,13 @@ async function cmdCode() {
  * Ralph: PRD-driven autonomous loop. Runs agent until all stories pass or max iterations.
  * progress.txt is initialized if missing; archive on branch change.
  */
-async function cmdRalph() {
+async function cmdRalph(maxIterationsArg) {
   const { runRalph } = require('./ralph');
   const argv = process.argv.slice(2);
   const args = argv.filter((a) => a !== 'ralph' && !a.startsWith('-'));
-  const maxIterations = parseInt(args[0], 10) || undefined;
+  const maxIterations = typeof maxIterationsArg !== 'undefined' && maxIterationsArg !== null
+    ? parseInt(String(maxIterationsArg), 10) || undefined
+    : (parseInt(args[0], 10) || undefined);
 
   console.log(chalk.cyan('\nRalph – PRD-driven autonomous loop\n') + '─'.repeat(50));
 
@@ -1070,76 +1093,137 @@ function cmdLatest() {
   }
 }
 
-async function main() {
-  const cmd = process.argv[2] || '';
+// --- Commander CLI (OpenClaw-style: global flags, subcommands, per-command help) ---
+const pkg = require('../package.json');
+program
+  .name('aetherclaw')
+  .description('Aether-Claw – secure swarm-based AI assistant (Node). Use aetherclaw <command> --help for per-command help.')
+  .version(pkg.version, '-V, --version', 'print version and exit')
+  .option('--no-color', 'disable ANSI colors')
+  .option('--json', 'machine-readable output (for status, doctor)');
 
-  if (cmd === 'onboard' || cmd === 'install') {
-    await cmdOnboard();
-    return;
-  }
-  if (cmd === 'status') {
-    cmdStatus();
-    return;
-  }
-  if (cmd === 'index') {
-    cmdIndex(process.argv[3]);
-    return;
-  }
-  if (cmd === 'tui') {
-    await cmdTui();
-    return;
-  }
-  if (cmd === 'telegram') {
-    await cmdTelegram();
-    return;
-  }
-  if (cmd === 'telegram-setup') {
-    await cmdTelegramSetup();
-    return;
-  }
-  if (cmd === 'daemon') {
-    require('./daemon');
-    return;
-  }
-  if (cmd === 'dashboard') {
-    require('./dashboard');
-    return;
-  }
-  if (cmd === 'doctor') {
+program
+  .command('help')
+  .description('show all available commands')
+  .action(() => program.help());
+
+program
+  .command('onboard')
+  .alias('install')
+  .description('first-time setup (API key, brain, optional Telegram)')
+  .action(() => cmdOnboard());
+
+program
+  .command('telegram-setup')
+  .description('connect or reconnect Telegram bot only')
+  .option('-y, --yes', 'skip prompts where possible')
+  .action(() => cmdTelegramSetup());
+
+program
+  .command('tui')
+  .description('chat TUI (gateway routing)')
+  .action(() => cmdTui());
+
+program
+  .command('telegram')
+  .description('start Telegram bot only (foreground)')
+  .action(() => cmdTelegram());
+
+program
+  .command('daemon')
+  .description('gateway daemon (heartbeat + Telegram)')
+  .action(() => require('./daemon'));
+
+program
+  .command('dashboard')
+  .description('web dashboard (Chat, Status, Config)')
+  .action(() => require('./dashboard'));
+
+program
+  .command('doctor')
+  .description('health check and suggestions')
+  .option('--json', 'output checks as JSON')
+  .action(() => {
     const { cmdDoctor } = require('./doctor');
-    cmdDoctor();
-    return;
-  }
-  if (cmd === 'latest') {
-    cmdLatest();
-    return;
-  }
-  if (cmd === 'code') {
-    await cmdCode();
-    return;
-  }
-  if (cmd === 'ralph') {
-    await cmdRalph();
-    return;
-  }
+    cmdDoctor(program.opts());
+  });
 
-  console.log('Aether-Claw (Node)');
-  console.log('  aetherclaw onboard        - first-time setup');
-  console.log('  aetherclaw install        - same as onboard');
-  console.log('  aetherclaw telegram-setup - connect or reconnect Telegram bot only');
-  console.log('  aetherclaw tui            - chat TUI (gateway routing)');
-  console.log('  aetherclaw telegram       - start Telegram bot only');
-  console.log('  aetherclaw daemon         - gateway daemon (heartbeat + Telegram)');
-  console.log('  aetherclaw dashboard      - web dashboard (status)');
-  console.log('  aetherclaw doctor         - health check and suggestions');
-  console.log('  aetherclaw latest         - update to latest from repo (keeps .env and config)');
-  console.log('  aetherclaw code [task]    - plan then build (Cursor-style coding)');
-  console.log('  aetherclaw ralph [N]      - PRD-driven autonomous loop (Ralph-style)');
-  console.log('  aetherclaw status         - status');
-  console.log('  aetherclaw index         - index brain files (optional: <file>)');
-}
+program
+  .command('latest')
+  .description('update to latest from repo (keeps .env and config)')
+  .action(() => cmdLatest());
 
-main().catch((e) => {
+program
+  .command('code [task]')
+  .description('plan then build (Cursor-style coding); task from arg or stdin')
+  .option('--plan-only', 'only print the plan')
+  .option('--no-plan', 'skip plan, run build only')
+  .action((task, cmd) => cmdCode(task || '', cmd.opts()));
+
+program
+  .command('ralph [maxIterations]')
+  .description('PRD-driven autonomous loop (Ralph-style); maxIterations is optional')
+  .action((maxIterations) => cmdRalph(maxIterations));
+
+program
+  .command('status')
+  .description('show status (config, index, skills)')
+  .option('--json', 'output as JSON')
+  .action(() => cmdStatus(program.opts()));
+
+program
+  .command('index [file]')
+  .description('index brain files for memory search (optional: single file)')
+  .action((file) => cmdIndex(file));
+
+const configCmd = program.command('config').description('get or set config values (dot path)');
+configCmd
+  .command('get <key>')
+  .description('get a config value by dot path (e.g. model_routing.tier_1_reasoning.model)')
+  .action((key) => {
+    const config = loadConfig(path.join(ROOT, 'swarm_config.json'));
+    const val = key.split('.').reduce((o, k) => (o != null ? o[k] : undefined), config);
+    if (val === undefined) {
+      console.error('Key not found:', key);
+      process.exit(1);
+    }
+    console.log(typeof val === 'object' ? JSON.stringify(val) : val);
+  });
+configCmd
+  .command('set <key> <value>')
+  .description('set a config value (value is JSON or string)')
+  .action((key, value) => {
+    const configPath = path.join(ROOT, 'swarm_config.json');
+    let config;
+    try {
+      config = loadConfig(configPath);
+    } catch (e) {
+      config = {};
+    }
+    const keys = key.split('.');
+    let parsed = value;
+    try {
+      parsed = JSON.parse(value);
+    } catch (_) {}
+    let target = config;
+    for (let i = 0; i < keys.length - 1; i++) {
+      const k = keys[i];
+      if (!(k in target) || typeof target[k] !== 'object' || Array.isArray(target[k])) target[k] = {};
+      target = target[k];
+    }
+    target[keys[keys.length - 1]] = parsed;
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+    console.log('Set', key);
+  });
+
+program.exitOverride(); // so we can set exit 0 when showing help (no args)
+program.parseAsync(process.argv).then(() => {
+  if (!process.argv.slice(2).length) process.exitCode = 0;
+}).catch((e) => {
+  if (e.code === 'commander.help' || e.code === 'commander.helpDisplayed' || e.code === 'commander.unknownCommand') {
+    process.exitCode = 0;
+    return;
+  }
   console.error(e);
   process.exit(1);
 });

@@ -30,8 +30,11 @@ Aether-Claw is intended to be installed **globally** so the `aetherclaw` command
 
 ## Commands
 
+Global flags (OpenClaw-style): `-V` / `--version` (print version), `--no-color` (disable ANSI colors), `--json` (machine-readable output for `status` and `doctor`). Use `aetherclaw <command> --help` for per-command help.
+
 | Command | Description |
 |--------|-------------|
+| `aetherclaw help` | Show all available commands |
 | `aetherclaw onboard` | First-time setup (API key, brain, optional Telegram) |
 | `aetherclaw tui` | Chat TUI (gateway routing, tools for coding tasks) |
 | `aetherclaw dashboard` | Web UI (Chat, Status, Security, Config) at http://localhost:8501 |
@@ -41,6 +44,8 @@ Aether-Claw is intended to be installed **globally** so the `aetherclaw` command
 | `aetherclaw telegram` | Run Telegram bot only (manual) |
 | `aetherclaw telegram-setup` | (Re)pair Telegram (token + pairing code) |
 | `aetherclaw index [file]` | Reindex brain for memory search |
+| `aetherclaw config get <key>` | Get config value by dot path (e.g. `model_routing.tier_1_reasoning.model`) |
+| `aetherclaw config set <key> <value>` | Set config value (value is JSON or string) |
 
 ## Environment
 
