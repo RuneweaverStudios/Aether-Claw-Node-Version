@@ -8,7 +8,8 @@ const { execSync } = require('child_process');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const chalk = require('chalk');
-const { loadConfig } = require('./config');
+const crypto = require('crypto');
+const { loadConfig, writeConfig } = require('./config');
 const { callLLM } = require('./api');
 const { runAgentLoop } = require('./agent-loop');
 const { indexAll, getBrainDir, searchMemory, readIndex, indexFile } = require('./brain');
@@ -52,7 +53,7 @@ function renderProgress(step, total, label) {
 }
 
 const BOX_W = 76;
-function openclawWrap(text, width) {
+function wrapBox(text, width) {
   const w = width || BOX_W - 6;
   const lines = [];
   for (const line of String(text).split(/\n/)) {
@@ -62,20 +63,41 @@ function openclawWrap(text, width) {
   }
   return lines;
 }
-function openclawBox(title, bodyLines) {
-  const t = '┌  ' + title + ' ' + '─'.repeat(Math.max(0, BOX_W - title.length - 6)) + '╮';
+function aetherclawBox(title, bodyLines) {
+  const t = '  ' + title + ' ' + '─'.repeat(Math.max(0, BOX_W - title.length - 6)) + '';
   console.log(t);
   for (const line of bodyLines) {
     const p = (line + '').padEnd(BOX_W - 6).slice(0, BOX_W - 6);
-    console.log('│  ' + p + '  │');
+    console.log('  ' + p + '  ');
   }
-  console.log('├' + '─'.repeat(BOX_W - 2) + '╯');
+  console.log('  ' + '─'.repeat(BOX_W - 2));
 }
-function openclawStep(title) {
-  console.log('◇  ' + title + ' ' + '─'.repeat(Math.max(0, BOX_W - title.length - 6)) + '╮');
+function aetherclawStep(title) {
+  console.log('  ' + title + ' ' + '─'.repeat(Math.max(0, BOX_W - title.length - 4)));
 }
-function openclawStepValue(value) {
-  console.log('│  ' + (value ?? ''));
+function aetherclawStepValue(value) {
+  console.log('  ' + (value ?? ''));
+}
+
+function randomToken() {
+  return crypto.randomBytes(24).toString('hex');
+}
+
+const openclawWrap = wrapBox;
+const openclawBox = aetherclawBox;
+const openclawStep = aetherclawStep;
+const openclawStepValue = aetherclawStepValue;
+
+function parseOnboardOpts() {
+  const argv = process.argv.slice(2);
+  const acceptRisk = argv.includes('--accept-risk');
+  let flow = null;
+  const flowIdx = argv.indexOf('--flow');
+  if (flowIdx >= 0 && argv[flowIdx + 1]) {
+    const f = (argv[flowIdx + 1] || '').trim().toLowerCase();
+    if (f === 'quickstart' || f === 'manual') flow = f;
+  }
+  return { acceptRisk, flow };
 }
 
 const BOOTSTRAP_MD_CONTENT = `# BOOTSTRAP - First-run ritual
@@ -181,49 +203,111 @@ If you're not comfortable with basic security and access control, don't run it.
 Recommended: pairing/allowlists, sandbox + least-privilege tools, keep secrets out of reach.
 Run regularly: node src/cli.js doctor`;
 
+function readConfigSnapshot(configPath) {
+  let config = {};
+  let valid = false;
+  const exists = fs.existsSync(configPath);
+  if (exists) {
+    try {
+      config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      valid = !!(config.model_routing && (config.model_routing.tier_1_reasoning?.model || config.model_routing.tier_2_action?.model));
+    } catch (_) {}
+  }
+  return { config, exists, valid };
+}
+
 async function cmdOnboard() {
   console.log(chalk.cyan('\n▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄'));
-  console.log(chalk.cyan('                  🦞 OPENCLAW 🦞                    \n'));
-  console.log('┌  OpenClaw onboarding');
-  console.log('│');
-  openclawStep('Security');
-  openclawBox('Security', openclawWrap(ONBOARD_SECURITY_BODY));
-  console.log('│');
-  openclawStep('I understand this is powerful and inherently risky. Continue?');
-  openclawStepValue('Yes');
-  console.log('│');
-  openclawStep('Onboarding mode');
-  openclawStepValue('Manual');
-  console.log('│');
+  console.log(chalk.cyan('                  A E T H E R C L A W                  \n'));
+  console.log('  Onboarding');
+  console.log('');
+  aetherclawStep('Security');
+  aetherclawBox('Security', wrapBox(ONBOARD_SECURITY_BODY));
+  console.log('');
+  const onboardOpts = parseOnboardOpts();
+  if (!onboardOpts.acceptRisk) {
+    const cont = (await ttyQuestion('  I understand this is powerful and inherently risky. Continue? [y/N]', 'n')).trim().toLowerCase();
+    if (cont !== 'y' && cont !== 'yes') {
+      console.log('  Exiting. Run with --accept-risk to skip this prompt.\n');
+      process.exit(0);
+    }
+  }
+  aetherclawStepValue('Accepted');
+  console.log('');
 
   const configPath = path.join(ROOT, 'swarm_config.json');
-  let config = {};
-  try { config = JSON.parse(fs.readFileSync(configPath, 'utf8')); } catch (_) {}
-  const hasConfig = fs.existsSync(configPath) && config.model_routing;
-  if (hasConfig) {
-    openclawStep('Existing config detected');
-    const workspaceDir = path.join(ROOT, config.brain?.directory || 'brain');
-    const reasoning = config.model_routing?.tier_1_reasoning?.model || '—';
-    openclawBox('Existing config detected', [
-      'workspace: ' + workspaceDir,
-      'model: ' + reasoning,
-      'gateway.mode: local',
-      'gateway.port: ' + (process.env.PORT || '8501')
-    ]);
-    console.log('│');
-    openclawStep('Config handling');
-    openclawStepValue('Update values');
-    console.log('│');
+  const snapshot = readConfigSnapshot(configPath);
+  let config = snapshot.config;
+  if (snapshot.exists && !snapshot.valid) {
+    aetherclawStep('Invalid config');
+    aetherclawBox('Invalid config', ['swarm_config.json exists but is invalid (e.g. missing model_routing).', 'Run: node src/cli.js doctor', 'Or continue to use defaults.']);
+    console.log('');
+    const action = (await ttyQuestion('  [1] Exit and run doctor  [2] Continue with defaults (default: 2)', '2')).trim();
+    if (action === '1') {
+      process.exit(0);
+    }
+    config = loadConfig(configPath);
   }
-  openclawStep('What do you want to set up?');
-  openclawStepValue('Local gateway (this machine)');
-  console.log('│');
-  openclawStep('Workspace directory');
-  openclawStepValue(ROOT);
-  console.log('│');
-  openclawStep('Model/auth provider');
-  openclawStepValue('OpenRouter (API key)');
-  console.log('│');
+
+  let flow = onboardOpts.flow;
+  if (!flow) {
+    aetherclawStep('Onboarding mode');
+    const flowChoice = (await ttyQuestion('  [1] QuickStart (minimal prompts)  [2] Manual (default: 1)', '1')).trim();
+    flow = flowChoice === '2' ? 'manual' : 'quickstart';
+  }
+  aetherclawStepValue(flow === 'quickstart' ? 'QuickStart' : 'Manual');
+  console.log('');
+
+  if (snapshot.exists && snapshot.valid) {
+    aetherclawStep('Existing config');
+    const wsDir = path.join(ROOT, config.brain?.directory || 'brain');
+    const reasoning = config.model_routing?.tier_1_reasoning?.model || '—';
+    aetherclawBox('Existing config', [
+      'workspace: ' + wsDir,
+      'model: ' + reasoning,
+      'gateway.port: ' + (config.gateway?.port || process.env.PORT || '8501')
+    ]);
+    console.log('');
+    const handling = (await ttyQuestion('  [1] Use existing  [2] Update values  [3] Reset (default: 2)', '2')).trim();
+    if (handling === '3') {
+      const resetScope = (await ttyQuestion('  Reset: [1] Config only  [2] Config + creds  [3] Full (config + creds + workspace backup)', '1')).trim();
+      const backupDir = os.tmpdir();
+      const envPath = path.join(ROOT, '.env');
+      if (resetScope === '2' || resetScope === '3') {
+        if (fs.existsSync(envPath)) {
+          fs.copyFileSync(envPath, path.join(backupDir, 'aetherclaw-onboard.env'));
+        }
+        let envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
+        envContent = envContent.replace(/OPENROUTER_API_KEY=.*/m, '');
+        fs.writeFileSync(envPath, envContent, 'utf8');
+      }
+      if (resetScope === '3') {
+        const brainPath = path.join(ROOT, 'brain');
+        if (fs.existsSync(brainPath)) {
+          fs.cpSync(brainPath, path.join(backupDir, 'aetherclaw-onboard.brain'), { recursive: true });
+        }
+        config = {};
+      }
+      if (resetScope === '1' || resetScope === '2') {
+        config = loadConfig(configPath);
+        config.model_routing = config.model_routing || {};
+        config.gateway = undefined;
+      }
+      writeConfig(configPath, config);
+    }
+    aetherclawStepValue(handling === '1' ? 'Use existing' : handling === '3' ? 'Reset' : 'Update values');
+    console.log('');
+  }
+
+  const workspaceDir = flow === 'manual'
+    ? (await ttyQuestion('  Workspace directory', config.brain?.directory ? path.join(ROOT, config.brain.directory) : ROOT)).trim() || ROOT
+    : path.join(ROOT, config.brain?.directory || 'brain');
+  if (!config.brain) config.brain = {};
+  config.brain.directory = path.relative(ROOT, workspaceDir) || 'brain';
+  writeConfig(configPath, { brain: config.brain });
+  aetherclawStep('Workspace');
+  aetherclawStepValue(workspaceDir);
+  console.log('');
 
   renderProgress(1, ONBOARD_STEPS_TOTAL, 'API Key');
   let key = process.env.OPENROUTER_API_KEY;
@@ -246,15 +330,14 @@ async function cmdOnboard() {
         fs.writeFileSync(envPath, line);
       }
       process.env.OPENROUTER_API_KEY = key;
-      console.log('  ✓ API key saved to .env\n');
+      console.log('  API key saved to .env\n');
     }
   } else {
-    console.log('  [1/6] 🔑 API Key: found in environment\n');
+    console.log('  [1/6] API Key: found in environment\n');
   }
 
   renderProgress(2, ONBOARD_STEPS_TOTAL, 'Model selection');
-  // [2/6] Model selection
-  console.log('  [2/6] 🧠 Model selection');
+  console.log('  [2/6] Model selection');
   console.log('  ' + '─'.repeat(50));
   console.log('  PREMIUM REASONING:');
   console.log('  [1] Claude 3.7 Sonnet    $3/$15/M  - Best overall');
@@ -300,7 +383,7 @@ async function cmdOnboard() {
     reasoningModel = info[0];
     modelLabel = info[1];
   }
-  console.log('  ✓ Reasoning: ' + reasoningModel + ' (' + modelLabel + ')\n');
+  console.log('  Reasoning: ' + reasoningModel + ' (' + modelLabel + ')\n');
   console.log('  Action model (for fast tasks):');
   const actionChoice = (await ttyQuestion('  [8] Haiku  [9] Flash  [0] DeepSeek  [Enter] Same as reasoning: ', '')).trim().toUpperCase();
   let actionModel;
@@ -311,37 +394,55 @@ async function cmdOnboard() {
   } else {
     actionModel = reasoningModel;
   }
-  console.log('  ✓ Action: ' + actionModel + '\n');
-  if (!config.model_routing) config.model_routing = {};
-  if (!config.model_routing.tier_1_reasoning) config.model_routing.tier_1_reasoning = {};
-  if (!config.model_routing.tier_2_action) config.model_routing.tier_2_action = {};
-  config.model_routing.tier_1_reasoning.model = reasoningModel;
-  config.model_routing.tier_2_action.model = actionModel;
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
-  console.log('  ✓ Model config saved to swarm_config.json\n');
-  console.log('│');
-  openclawStep('Model configured');
-  openclawBox('Model configured', ['Default model set to ' + reasoningModel]);
-  console.log('│');
-  openclawStep('Default model');
-  openclawStepValue('Keep current (' + reasoningModel + ')');
-  console.log('│');
-  const gatewayPort = process.env.PORT || '8501';
-  openclawStep('Gateway port');
-  openclawStepValue(gatewayPort);
-  console.log('│');
-  openclawStep('Gateway bind');
-  openclawStepValue('Loopback (127.0.0.1)');
-  console.log('│');
-  openclawStep('Gateway auth');
-  openclawStepValue('Token');
-  console.log('│');
-  openclawStep('Tailscale exposure');
-  openclawStepValue('Off');
-  console.log('│');
-  openclawStep('Gateway token (blank to generate)');
-  openclawStepValue('(use OPENCLAW_GATEWAY_TOKEN or config)');
-  console.log('│');
+  console.log('  Action: ' + actionModel + '\n');
+  config = loadConfig(configPath);
+  writeConfig(configPath, {
+    model_routing: {
+      ...config.model_routing,
+      tier_1_reasoning: { ...(config.model_routing?.tier_1_reasoning || {}), model: reasoningModel },
+      tier_2_action: { ...(config.model_routing?.tier_2_action || {}), model: actionModel }
+    }
+  });
+  console.log('  Model config saved to swarm_config.json\n');
+  aetherclawStep('Model configured');
+  aetherclawBox('Model configured', ['Default model set to ' + reasoningModel]);
+  console.log('');
+
+  let gatewayPort = Number(config.gateway?.port || process.env.PORT || 8501);
+  let gatewayBind = config.gateway?.bind || 'loopback';
+  let gatewayAuthMode = config.gateway?.auth?.mode || 'token';
+  let gatewayToken = config.gateway?.auth?.token || process.env.AETHERCLAW_GATEWAY_TOKEN || '';
+  if (flow === 'manual') {
+    gatewayPort = Number((await ttyQuestion('  Gateway port', String(gatewayPort))).trim() || gatewayPort) || 8501;
+    const bindChoice = (await ttyQuestion('  Gateway bind: [1] Loopback  [2] LAN  [3] Custom (default: 1)', '1')).trim();
+    gatewayBind = bindChoice === '2' ? 'lan' : bindChoice === '3' ? 'custom' : 'loopback';
+    const authChoice = (await ttyQuestion('  Gateway auth: [1] Token  [2] Password (default: 1)', '1')).trim();
+    gatewayAuthMode = authChoice === '2' ? 'password' : 'token';
+    if (gatewayAuthMode === 'token') {
+      const tok = (await ttyQuestion('  Gateway token (blank to generate)', gatewayToken || '')).trim();
+      gatewayToken = tok || randomToken();
+    }
+  } else {
+    if (!gatewayToken) gatewayToken = randomToken();
+  }
+  let gatewayAuth;
+  if (gatewayAuthMode === 'password') {
+    const pwd = (await ttyQuestionMasked('  Gateway password: ')).trim();
+    gatewayAuth = { mode: 'password', password: pwd };
+  } else {
+    gatewayAuth = { mode: 'token', token: gatewayToken };
+  }
+  writeConfig(configPath, {
+    gateway: {
+      port: gatewayPort,
+      bind: gatewayBind,
+      auth: gatewayAuth,
+      tailscale: config.gateway?.tailscale || { mode: 'off' }
+    }
+  });
+  aetherclawStep('Gateway');
+  aetherclawStepValue('port ' + gatewayPort + ', bind ' + gatewayBind + ', auth ' + gatewayAuthMode);
+  console.log('');
 
   renderProgress(3, ONBOARD_STEPS_TOTAL, 'Brain');
   openclawStep('Workspace OK / Brain');
@@ -375,7 +476,7 @@ async function cmdOnboard() {
   if (configureChannels) {
     openclawStep('How channels work');
     openclawBox('How channels work', openclawWrap(
-      'DM security: default is pairing; unknown DMs get a pairing code. Approve with: openclaw pairing approve <channel> <code>. Telegram: register a bot with @BotFather. Docs: https://docs.openclaw.ai/channels/telegram'
+      'DM security: default is pairing; unknown DMs get a pairing code. Telegram: register a bot with @BotFather.'
     ));
     console.log('│');
     openclawStep('Select a channel');
@@ -443,7 +544,7 @@ async function cmdOnboard() {
   }
   openclawStep('Hooks');
   openclawBox('Hooks', openclawWrap(
-    'Hooks let you automate actions when agent commands are issued. Example: Save session context when you issue /new. Learn more: https://docs.openclaw.ai/hooks'
+    'Hooks let you automate actions when agent commands are issued. Example: Save session context when you issue /new.'
   ));
   console.log('│');
   openclawStep('Enable hooks?');
@@ -473,7 +574,7 @@ async function cmdOnboard() {
   console.log('│');
 
   renderProgress(6, ONBOARD_STEPS_TOTAL, 'Complete');
-  const port = Number(process.env.PORT) || 8501;
+  const port = gatewayPort;
   openclawStep('Status');
   openclawBox('Status', [
     'Telegram: ' + (process.env.TELEGRAM_BOT_TOKEN ? 'ok' : 'not configured'),
@@ -494,18 +595,16 @@ async function cmdOnboard() {
   openclawBox('Control UI', [
     'Web UI: http://127.0.0.1:' + port + '/',
     'Gateway: reachable',
-    'Docs: https://docs.openclaw.ai/web/control-ui'
+    'Open the dashboard anytime: node src/cli.js dashboard'
   ]);
   console.log('│');
   openclawStep('Token');
   openclawBox('Token', openclawWrap(
-    'Gateway token: shared auth for the Gateway + Control UI. View token: openclaw config get gateway.auth.token. Open the dashboard anytime: node src/cli.js dashboard'
+    'Gateway token: shared auth for the Gateway + Control UI. Stored in swarm_config.json (gateway.auth.token). Open the dashboard anytime: node src/cli.js dashboard'
   ));
   console.log('│');
-  console.log('◆  How do you want to hatch your bot?');
-  console.log('│  ● Hatch in TUI (recommended)');
-  console.log('│  ○ Open the Web UI');
-  console.log('│  ○ Do this later\n');
+  console.log('  How do you want to hatch your bot?');
+  console.log('  [1] TUI (recommended)  [2] Web UI  [3] Later\n');
   const hatchChoice = (await ttyQuestion('  [1] TUI  [2] Web UI  [3] Later (default: 1)', '1')).trim();
   const hatch = hatchChoice === '2' ? '2' : hatchChoice === '3' ? '4' : '1';
   if (hatch !== '4') {
@@ -518,13 +617,12 @@ async function cmdOnboard() {
   }
   if (hatch === '2') {
     const { spawn } = require('child_process');
-    const port = Number(process.env.PORT) || 8501;
-    const url = `http://localhost:${port}`;
-    console.log('\n  🐣 Launching Web dashboard...\n');
+    const url = `http://localhost:${gatewayPort}`;
+    console.log('\n  Launching Web dashboard...\n');
     const child = spawn(process.execPath, [path.join(ROOT, 'src', 'dashboard.js')], {
       cwd: ROOT,
       stdio: [null, 'inherit', 'inherit'],
-      env: { ...process.env, PORT: String(port) }
+      env: { ...process.env, PORT: String(gatewayPort) }
     });
     child.on('error', (err) => {
       console.log('  Could not start dashboard:', err.message);
@@ -546,7 +644,7 @@ async function cmdOnboard() {
     }, 1800);
     await new Promise((res) => child.on('close', res));
   } else if (hatch === '3') {
-    console.log('\n  🐣 Hatch in Telegram...\n');
+    console.log('\n  Hatch in Telegram...\n');
     require('dotenv').config({ path: path.join(ROOT, '.env') });
     if (process.env.TELEGRAM_BOT_TOKEN) {
       console.log('  Telegram is already connected. Run the gateway to receive messages: ' + chalk.cyan('node src/daemon.js') + '\n');
@@ -562,7 +660,7 @@ async function cmdOnboard() {
       }
     }
   } else if (hatch !== '4') {
-    console.log('\n  🐣 Hatching into TUI...\n');
+    console.log('\n  Hatching into TUI...\n');
     await cmdTui();
   } else {
     console.log('\n  Run later:');
@@ -740,7 +838,7 @@ async function cmdTelegram() {
   }
   const config = loadConfig(path.join(ROOT, 'swarm_config.json'));
   const model = config.model_routing?.tier_1_reasoning?.model || 'anthropic/claude-3.7-sonnet';
-  const baseSystemPrompt = 'You are Aether-Claw, a secure AI assistant. Be helpful and concise. Reply only in natural language and markdown. Do not include raw tool-call or function-call syntax in your message.';
+  const baseSystemPrompt = 'You are Aether-Claw, a secure AI assistant. Be helpful and concise. If the user asks to connect GitHub or whether Aether-Claw is connected to GitHub, use the github_connect tool and share the result or instructions. Reply only in natural language and markdown. Do not include raw tool-call or function-call syntax in your message.';
   const telegramChatsReceivedFirstReply = new Set();
   console.log('Telegram bot running. Press Ctrl+C to stop.\n');
   let offset = 0;
@@ -975,7 +1073,7 @@ function cmdLatest() {
 async function main() {
   const cmd = process.argv[2] || '';
 
-  if (cmd === 'onboard') {
+  if (cmd === 'onboard' || cmd === 'install') {
     await cmdOnboard();
     return;
   }
@@ -1027,6 +1125,7 @@ async function main() {
 
   console.log('Aether-Claw (Node)');
   console.log('  node src/cli.js onboard        - first-time setup');
+  console.log('  node src/cli.js install        - same as onboard');
   console.log('  node src/cli.js telegram-setup - connect or reconnect Telegram bot only');
   console.log('  node src/cli.js tui            - chat TUI (gateway routing)');
   console.log('  node src/cli.js telegram       - start Telegram bot only');

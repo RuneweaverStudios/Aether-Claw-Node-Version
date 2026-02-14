@@ -1,6 +1,10 @@
 const path = require('path');
 const fs = require('fs');
 
+/**
+ * Optional gateway config persisted in swarm_config.json.
+ * gateway.port, gateway.bind, gateway.auth (mode, token | password), gateway.tailscale.mode
+ */
 const DEFAULT_CONFIG = {
   version: '1.0.0',
   system_name: 'Aether-Claw',
@@ -32,4 +36,25 @@ function loadConfig(configPath) {
   }
 }
 
-module.exports = { loadConfig, DEFAULT_CONFIG };
+/**
+ * Merge updates into config and write to file. Shallow merge at top level; nested objects (e.g. gateway, model_routing) are merged one level deep.
+ * @param {string} configPath - Full path to swarm_config.json
+ * @param {Object} updates - Keys to merge (e.g. { gateway: { port: 8501, auth: { mode: 'token' } } })
+ */
+function writeConfig(configPath, updates) {
+  const dir = configPath || path.join(process.cwd(), 'swarm_config.json');
+  const current = loadConfig(dir);
+  const merged = { ...current };
+  for (const key of Object.keys(updates)) {
+    const val = updates[key];
+    if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+      merged[key] = { ...(merged[key] || {}), ...val };
+    } else {
+      merged[key] = val;
+    }
+  }
+  fs.writeFileSync(dir, JSON.stringify(merged, null, 2), 'utf8');
+  return merged;
+}
+
+module.exports = { loadConfig, writeConfig, DEFAULT_CONFIG };
