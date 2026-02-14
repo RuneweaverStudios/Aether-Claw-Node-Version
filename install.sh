@@ -88,6 +88,104 @@ if ! command -v npm &> /dev/null; then
 fi
 printf "${GREEN}✓${NC} npm $(npm -v)\n"
 
+# GitHub CLI (gh) – optional but recommended for github_connect tool
+install_gh() {
+  if command -v gh &>/dev/null; then
+    printf "${GREEN}✓${NC} GitHub CLI (gh)\n"
+    return 0
+  fi
+  case "$(uname -s)" in
+    Darwin)
+      if command -v brew &>/dev/null; then
+        printf "${BLUE}Installing GitHub CLI (gh)...${NC}\n"
+        if brew install gh 2>/dev/null; then
+          printf "${GREEN}✓${NC} GitHub CLI (gh) installed\n"
+        else
+          printf "${YELLOW}⚠${NC} Could not install gh. Install manually: ${CYAN}brew install gh${NC}\n"
+        fi
+      else
+        printf "${YELLOW}⚠${NC} GitHub CLI not found. Optional: install from https://cli.github.com/ or ${CYAN}brew install gh${NC}\n"
+      fi
+      ;;
+    Linux)
+      if command -v apt-get &>/dev/null && [ -z "${APT_GET_DISABLED:-}" ]; then
+        printf "${BLUE}Installing GitHub CLI (gh)...${NC}\n"
+        if sudo apt-get update -qq 2>/dev/null && sudo apt-get install -y gh 2>/dev/null; then
+          printf "${GREEN}✓${NC} GitHub CLI (gh) installed\n"
+        else
+          printf "${YELLOW}⚠${NC} Could not install gh. See https://cli.github.com/\n"
+        fi
+      elif command -v dnf &>/dev/null; then
+        printf "${BLUE}Installing GitHub CLI (gh)...${NC}\n"
+        if sudo dnf install -y gh 2>/dev/null; then
+          printf "${GREEN}✓${NC} GitHub CLI (gh) installed\n"
+        else
+          printf "${YELLOW}⚠${NC} Could not install gh. See https://cli.github.com/\n"
+        fi
+      else
+        printf "${YELLOW}⚠${NC} GitHub CLI not found. Optional: install from https://cli.github.com/\n"
+      fi
+      ;;
+    MINGW*|MSYS*|CYGWIN*)
+      if command -v winget &>/dev/null; then
+        printf "${BLUE}Installing GitHub CLI (gh)...${NC}\n"
+        if winget install --id GitHub.cli -e --accept-source-agreements --accept-package-agreements 2>/dev/null; then
+          printf "${GREEN}✓${NC} GitHub CLI (gh) installed\n"
+        else
+          printf "${YELLOW}⚠${NC} Could not install gh. Install from https://cli.github.com/\n"
+        fi
+      else
+        printf "${YELLOW}⚠${NC} GitHub CLI not found. Optional: install from https://cli.github.com/\n"
+      fi
+      ;;
+    *)
+      printf "${YELLOW}⚠${NC} GitHub CLI not found. Optional: install from https://cli.github.com/\n"
+      ;;
+  esac
+}
+install_gh || true
+
+# Claude Code CLI and SDK (@anthropic-ai/claude-code) – optional, for `claude` command and agent use
+install_claude_code() {
+  if command -v claude &>/dev/null; then
+    printf "${GREEN}✓${NC} Claude Code CLI (claude)\n"
+    return 0
+  fi
+  printf "${BLUE}Installing Claude Code CLI and SDK...${NC}\n"
+  if npm install -g @anthropic-ai/claude-code 2>/dev/null; then
+    printf "${GREEN}✓${NC} Claude Code CLI (claude) installed\n"
+  else
+    case "$(uname -s)" in
+      Darwin)
+        if command -v brew &>/dev/null; then
+          if brew install --cask claude-code 2>/dev/null; then
+            printf "${GREEN}✓${NC} Claude Code CLI (claude) installed\n"
+          else
+            printf "${YELLOW}⚠${NC} Could not install Claude Code. Try: ${CYAN}npm install -g @anthropic-ai/claude-code${NC} or https://claude.ai/download\n"
+          fi
+        else
+          printf "${YELLOW}⚠${NC} Claude Code not found. Optional: ${CYAN}npm install -g @anthropic-ai/claude-code${NC} or https://claude.ai/download\n"
+        fi
+        ;;
+      MINGW*|MSYS*|CYGWIN*)
+        if command -v winget &>/dev/null; then
+          if winget install Anthropic.ClaudeCode --accept-source-agreements --accept-package-agreements 2>/dev/null; then
+            printf "${GREEN}✓${NC} Claude Code CLI (claude) installed\n"
+          else
+            printf "${YELLOW}⚠${NC} Could not install Claude Code. Try: ${CYAN}npm install -g @anthropic-ai/claude-code${NC} or https://claude.ai/download\n"
+          fi
+        else
+          printf "${YELLOW}⚠${NC} Claude Code not found. Optional: ${CYAN}npm install -g @anthropic-ai/claude-code${NC} or https://claude.ai/download\n"
+        fi
+        ;;
+      *)
+        printf "${YELLOW}⚠${NC} Claude Code not found. Optional: ${CYAN}npm install -g @anthropic-ai/claude-code${NC} or https://claude.ai/download\n"
+        ;;
+    esac
+  fi
+}
+install_claude_code || true
+
 # Install
 printf "\n${BLUE}Installing to $INSTALL_DIR...${NC}\n"
 

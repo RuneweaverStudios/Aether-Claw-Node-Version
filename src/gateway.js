@@ -17,7 +17,7 @@ const { isFirstRun, getBootstrapContext } = require('./personality');
 const ROOT_DEFAULT = path.resolve(__dirname, '..');
 
 /** Base system prompt: one agent with full tools; no intent-based branching. */
-const BASE_SYSTEM_PROMPT = `You are Aether-Claw, a secure AI assistant with access to tools (read_file, write_file, edit, exec, process, create_directory, memory_search, memory_get, web_search, web_fetch, and others). Use tools when needed to fulfill the user's request. To create a folder (e.g. on Desktop) use create_directory with path like ~/Desktop/foldername, or exec with mkdir -p. Only use tools from your tool list; never output raw function-call or tool syntax in your message. Reply in natural language and markdown.`;
+const BASE_SYSTEM_PROMPT = `You are Aether-Claw, a secure AI assistant with access to tools (read_file, write_file, edit, exec, process, create_directory, memory_search, memory_get, web_search, web_fetch, github_connect, and others). Use tools when needed to fulfill the user's request. If the user asks to connect GitHub or whether Aether-Claw is connected to GitHub, use the github_connect tool (action: check or login) and share the result or instructions. To create a folder (e.g. on Desktop) use create_directory with path like ~/Desktop/foldername, or exec with mkdir -p. Only use tools from your tool list; never output raw function-call or tool syntax in your message. Reply in natural language and markdown.`;
 
 /**
  * Build the full system prompt for a run: base + bootstrap context + skills section.

@@ -5,7 +5,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const { execSync, spawn } = require('child_process');
+const { execSync, spawn, spawnSync } = require('child_process');
 const axios = require('axios');
 const { searchMemory, readIndex, getBrainDir, indexAll } = require('../brain');
 const { checkPermission, ActionCategory } = require('../safety-gate');
@@ -430,7 +430,22 @@ const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'lint', description: 'Run linter (eslint) and return errors.', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'ralph_get_next_story', description: 'Get the next Ralph story to implement. Reads prd.json and returns the highest-priority user story where passes is false, plus the Codebase Patterns section from progress.txt. Use this instead of manually reading prd.json when running the Ralph workflow.', parameters: { type: 'object', properties: { prd_path: { type: 'string', description: 'Path to prd.json relative to workspace (default prd.json)' }, progress_path: { type: 'string', description: 'Path to progress.txt (default progress.txt)' } } } } },
   { type: 'function', function: { name: 'ralph_mark_story_passed', description: 'Mark a user story as passed in the PRD. Sets passes to true for the given story id. Use after successfully implementing a story and passing quality checks.', parameters: { type: 'object', properties: { story_id: { type: 'string', description: 'User story id (e.g. US-001)' }, prd_path: { type: 'string', description: 'Path to prd.json (default prd.json)' } }, required: ['story_id'] } } },
-  { type: 'function', function: { name: 'ralph_append_progress', description: 'Append a progress entry to progress.txt. Use after completing a story to record what was done and learnings for future iterations. Content is appended with a timestamp and separator.', parameters: { type: 'object', properties: { content: { type: 'string', description: 'Progress text (implementation summary and learnings)' }, progress_path: { type: 'string', description: 'Path to progress.txt (default progress.txt)' } }, required: ['content'] } } }
+  { type: 'function', function: { name: 'ralph_append_progress', description: 'Append a progress entry to progress.txt. Use after completing a story to record what was done and learnings for future iterations. Content is appended with a timestamp and separator.', parameters: { type: 'object', properties: { content: { type: 'string', description: 'Progress text (implementation summary and learnings)' }, progress_path: { type: 'string', description: 'Path to progress.txt (default progress.txt)' } }, required: ['content'] } } },
+  {
+    type: 'function',
+    function: {
+      name: 'github_connect',
+      description: 'Check if GitHub CLI (gh) is authenticated, or run GitHub login. Use this when the user asks to connect GitHub, wants to connect Aether-Claw to GitHub, or asks if Aether-Claw is connected to GitHub. Runs gh auth status to check; if not logged in, can run gh auth login (interactive) or return instructions for the user.',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['check', 'login'], description: 'check: only report status. login: check then run gh auth login if not connected (interactive in terminal)' },
+          run_interactive: { type: 'boolean', description: 'If true and not connected, run gh auth login in this process so user can complete login in terminal (only works when running from a TTY)' }
+        },
+        required: []
+      }
+    }
+  }
 ];
 
 function resolvePath(workspaceRoot, relativePath) {
@@ -1355,10 +1370,82 @@ function runRalphAppendProgress(workspaceRoot, args, context) {
   }
 }
 
+const GITHUB_CONNECT_INSTRUCTIONS = [
+  'To connect GitHub:',
+  '  1. In your terminal run: gh auth login',
+  '  2. Choose GitHub.com (or your host), then HTTPS or SSH.',
+  '  3. Complete the flow (browser or paste a token).',
+  '  4. Then ask again "am I connected to GitHub?" to confirm.'
+].join('\n');
+
+function runGithubConnect(workspaceRoot, args) {
+  const action = args.action || 'check';
+  const runInteractive = args.run_interactive === true;
+  try {
+    const statusOut = execSync('gh auth status', {
+      encoding: 'utf8',
+      timeout: 5000,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    return {
+      connected: true,
+      message: 'GitHub CLI is authenticated. Aether-Claw can use gh for Git operations.',
+      details: statusOut.trim()
+    };
+  } catch (e) {
+    if (e.code === 'ENOENT') {
+      return {
+        connected: false,
+        error: 'GitHub CLI (gh) is not installed.',
+        instructions: 'Install gh: https://cli.github.com/ — e.g. on macOS: brew install gh. Then run: gh auth login'
+      };
+    }
+    const stderr = (e.stderr || e.message || '').toString();
+    const notLoggedIn = e.status !== 0 || stderr.toLowerCase().includes('not logged in');
+    if (!notLoggedIn) {
+      return { error: stderr.trim() || 'gh auth status failed' };
+    }
+    const shouldRunLogin = action === 'login' && (runInteractive || process.stdin.isTTY);
+    if (shouldRunLogin && process.stdin.isTTY) {
+      try {
+        const result = spawnSync('gh', ['auth', 'login'], {
+          stdio: 'inherit',
+          cwd: workspaceRoot || ROOT_DEFAULT
+        });
+        if (result.status === 0) {
+          const out = execSync('gh auth status', { encoding: 'utf8', timeout: 5000 });
+          return {
+            connected: true,
+            message: 'GitHub login completed. You are now connected.',
+            details: out.trim(),
+            instructions: GITHUB_CONNECT_INSTRUCTIONS
+          };
+        }
+        return {
+          connected: false,
+          message: 'gh auth login exited without completing. You can try again or run it manually in your terminal.',
+          instructions: GITHUB_CONNECT_INSTRUCTIONS
+        };
+      } catch (err) {
+        return {
+          connected: false,
+          error: err.message || 'gh auth login failed',
+          instructions: GITHUB_CONNECT_INSTRUCTIONS
+        };
+      }
+    }
+    return {
+      connected: false,
+      message: 'GitHub is not connected. Aether-Claw uses the GitHub CLI (gh) for authentication.',
+      instructions: GITHUB_CONNECT_INSTRUCTIONS
+    };
+  }
+}
+
 /**
  * Execute a single tool by name with parsed arguments. Async for network/Telegram/vision tools.
  * @param {string} workspaceRoot - Project root path
- * @param {string} toolName - Tool name (exec, process, read_file, write_file, memory_search, edit, apply_patch, memory_get, web_search, web_fetch, browser, canvas, nodes, message, cron, gateway, sessions_*, agents_list, image, open_in_editor, ...)
+ * @param {string} toolName - Tool name (exec, process, read_file, write_file, memory_search, edit, apply_patch, memory_get, web_search, web_fetch, browser, canvas, nodes, message, cron, gateway, sessions_*, agents_list, image, open_in_editor, github_connect, ...)
  * @param {Object} args - Tool arguments (from LLM)
  * @param {Object} context - { config }
  * @returns {Promise<Object>} Result to send back to the model (will be JSON.stringify'd)
@@ -1467,6 +1554,8 @@ async function runTool(workspaceRoot, toolName, args, context = {}) {
       return runRalphMarkStoryPassed(root, args, ctx);
     case 'ralph_append_progress':
       return runRalphAppendProgress(root, args, ctx);
+    case 'github_connect':
+      return runGithubConnect(root, args);
     default:
       return { error: 'Unknown tool: ' + toolName };
   }
