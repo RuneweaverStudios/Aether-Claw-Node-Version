@@ -11,7 +11,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const axios = require('axios');
 const { loadConfig } = require('./config');
-const { callLLM } = require('./api');
+const { runAgentLoop } = require('./agent-loop');
 const { indexAll, getBrainDir } = require('./brain');
 const { sendTelegramMessage, sendChatAction } = require('./telegram-setup');
 const { isFirstRun, getBootstrapFirstMessage, getBootstrapContext } = require('./personality');
@@ -66,8 +66,7 @@ async function runTelegramLoop() {
   if (!token) return;
 
   const config = loadConfig(path.join(ROOT, 'swarm_config.json'));
-  const model = config.model_routing?.tier_1_reasoning?.model || 'anthropic/claude-3.7-sonnet';
-  const baseSystemPrompt = 'You are Aether-Claw, a secure AI assistant. Be helpful and concise. Reply only in natural language and markdown. Do not include raw tool-call or function-call syntax in your message.';
+  const baseSystemPrompt = 'You are Aether-Claw, a secure AI assistant with tools (exec, read_file, write_file, create_directory, memory_search, etc.). Be helpful and concise. Use tools when needed; reply in natural language and markdown. Do not include raw tool-call or function-call syntax in your message.';
   const telegramChatsReceivedFirstReply = new Set();
 
   let offset = 0;
@@ -102,11 +101,8 @@ async function runTelegramLoop() {
                 let systemPrompt = baseSystemPrompt;
                 if (firstRun) systemPrompt += getBootstrapContext(ROOT);
                 systemPrompt = buildSystemPromptWithSkills(systemPrompt, ROOT);
-                const reply = await callLLM(
-                  { prompt: text, systemPrompt, model, max_tokens: 4096 },
-                  config
-                );
-                out = (reply || '').slice(0, 4000);
+                const result = await runAgentLoop(ROOT, text, systemPrompt, config, { tier: 'action', max_tokens: 4096 });
+                out = (result.reply || result.error || '').slice(0, 4000);
               } finally {
                 clearInterval(typingInterval);
               }

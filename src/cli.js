@@ -518,17 +518,9 @@ async function cmdTui() {
     const label = action === 'action' ? chalk.dim(' [action]') : action === 'memory' ? chalk.dim(' [memory]') : action === 'reflect' ? chalk.dim(' [plan]') : '';
     console.log(chalk.dim('Thinking...') + label);
     try {
-      let reply;
-      if (action === 'action') {
-        const result = await runAgentLoop(ROOT, query, systemPrompt, config, { tier: 'action', max_tokens: 4096 });
-        reply = result.error ? result.error : result.reply;
-        if (result.toolCallsCount) console.log(chalk.dim('  (used ' + result.toolCallsCount + ' tool calls)\n'));
-      } else {
-        reply = await callLLM(
-          { prompt: query, systemPrompt, tier, max_tokens: 4096 },
-          config
-        );
-      }
+      const result = await runAgentLoop(ROOT, query, systemPrompt, config, { tier, max_tokens: 4096 });
+      const reply = result.error ? result.error : result.reply;
+      if (result.toolCallsCount) console.log(chalk.dim('  (used ' + result.toolCallsCount + ' tool calls)\n'));
       console.log(chalk.green('\nAether-Claw:\n') + reply + '\n');
     } catch (e) {
       console.log(chalk.red('Error: ') + (e.message || e) + '\n');

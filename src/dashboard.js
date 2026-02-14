@@ -17,7 +17,6 @@ const { searchMemory } = require('./brain');
 const { buildSystemPromptWithSkills } = require('./openclaw-skills');
 const { getKillSwitch } = require('./kill-switch');
 const { routePrompt } = require('./gateway');
-const { callLLM } = require('./api');
 const { runAgentLoop } = require('./agent-loop');
 const { isFirstRun, getBootstrapFirstMessage, getBootstrapContext } = require('./personality');
 
@@ -148,16 +147,9 @@ async function handleChatMessage(message) {
   systemPrompt = buildSystemPromptWithSkills(systemPrompt, ROOT);
 
   try {
-    if (action === 'action') {
-      const result = await runAgentLoop(ROOT, query, systemPrompt, config, { tier: 'action', max_tokens: 4096 });
-      if (result.error && !result.reply) return { error: result.error };
-      return { reply: result.reply || '', action, toolCallsCount: result.toolCallsCount };
-    }
-    const reply = await callLLM(
-      { prompt: query, systemPrompt, tier, max_tokens: 4096 },
-      config
-    );
-    return { reply: reply || '', action };
+    const result = await runAgentLoop(ROOT, query, systemPrompt, config, { tier, max_tokens: 4096 });
+    if (result.error && !result.reply) return { error: result.error };
+    return { reply: result.reply || '', action, toolCallsCount: result.toolCallsCount };
   } catch (e) {
     return { error: e.message || String(e) };
   }
