@@ -15,23 +15,20 @@ cd ~/.aether-claw-node && aetherclaw onboard
 aetherclaw tui
 ```
 
-(If you didn't install globally, use `node src/cli.js onboard` and `node src/cli.js tui` instead.)
-
-## Manual setup
+## Manual setup (global install only)
 
 ```bash
 git clone https://github.com/RuneweaverStudios/Aether-Claw-Node-Version.git
 cd Aether-Claw-Node-Version
 npm install
-npm run install:global   # optional: install globally so 'aetherclaw' is on PATH
-aetherclaw onboard       # or: node src/cli.js onboard
+npm install -g .
+aetherclaw onboard
+aetherclaw tui
 ```
 
-**Global install (recommended):** From the repo run `npm run install:global` (or `npm install -g .`) so the `aetherclaw` command is available everywhere. The package sets `preferGlobal: true` so npm will suggest global install when you install locally.
+Aether-Claw is intended to be installed **globally** so the `aetherclaw` command is on your PATH. The installer and docs assume global install only.
 
 ## Commands
-
-Use the `aetherclaw` command if you installed globally; otherwise use `node src/cli.js <cmd>` from the repo.
 
 | Command | Description |
 |--------|-------------|
@@ -44,8 +41,6 @@ Use the `aetherclaw` command if you installed globally; otherwise use `node src/
 | `aetherclaw telegram` | Run Telegram bot only (manual) |
 | `aetherclaw telegram-setup` | (Re)pair Telegram (token + pairing code) |
 | `aetherclaw index [file]` | Reindex brain for memory search |
-
-Or use npm scripts from the repo: `npm run onboard`, `npm run tui`, `npm run dashboard`, `npm run status`, `npm run doctor`, `npm run daemon`, `npm run telegram`.
 
 ## Environment
 
@@ -65,7 +60,7 @@ BRAVE_API_KEY=optional (for web_search tool)
 - **Brain**: `brain/*.md` indexed for memory search; personality in soul.md / user.md.
 - **Skills**: OpenClaw-style (SKILL.md directories in `skills/`). **Included by default:** **cursor-agent** (open projects in Cursor/VS Code, run Cursor CLI for coding tasks), **composio-twitter** (X/Twitter research via Composio, zero X API cost; optional: requires Bun + `COMPOSIO_API_KEY`). Install more from ClawHub (`clawhub install <slug>`). Each skill is audited for security/prompt-injection before use; results cached. Dashboard **Security** tab shows warnings and audit status.
 - **Safety**: Kill switch and safety gate (configurable) gate exec and file tools.
-- **Daemon**: Installer can register a LaunchAgent that runs `node src/daemon.js` (heartbeat + Telegram). Heartbeat interval is configurable in `swarm_config.json` (`heartbeat.interval_minutes`).
+- **Daemon**: Installer can register a LaunchAgent that runs the daemon from the install directory (heartbeat + Telegram). Heartbeat interval is configurable in `swarm_config.json` (`heartbeat.interval_minutes`).
 
 ## Project layout
 

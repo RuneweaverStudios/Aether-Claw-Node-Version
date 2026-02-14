@@ -202,7 +202,7 @@ async function setupTelegram(envPath, { question, questionMasked }, options = {}
     process.env.TELEGRAM_CHAT_ID = chatId;
     console.log('  ✓ Credentials saved to .env');
     console.log('\n  Telegram runs with the gateway daemon (install.sh → install or restart gateway).');
-    console.log('  Or run manually: node src/cli.js telegram\n');
+    console.log('  Or run manually: aetherclaw telegram\n');
     return true;
   } catch (e) {
     console.log('  ✗ Error saving: ' + e.message);

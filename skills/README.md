@@ -58,5 +58,5 @@ Before a skill is used (included in the system prompt), it is checked for:
 
 Results are **cached** in `brain/skill_audit_cache.json`. Skills that pass are marked safe and not rescanned until their content changes. Skills that fail are excluded from the prompt and listed in the dashboard **Security** tab with warnings.
 
-- **List/status**: `node src/cli.js status`, TUI `/skills`, or dashboard **Status** and **Security** tabs.
+- **List/status**: `aetherclaw status`, TUI `/skills`, or dashboard **Status** and **Security** tabs.
 - **Doctor**: Reports how many skills passed or failed audit.

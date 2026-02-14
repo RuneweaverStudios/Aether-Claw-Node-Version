@@ -126,7 +126,7 @@ function seedBootstrapIfNeeded(root) {
   console.log('  ✓ Created brain/BOOTSTRAP.md (first-run conversation)\n');
 }
 
-/** Read stdin to end (for piping: echo "task" | node src/cli.js code). */
+/** Read stdin to end (for piping: echo "task" | aetherclaw code). */
 function readStdin() {
   return new Promise((resolve) => {
     const chunks = [];
@@ -201,7 +201,7 @@ A bad prompt can trick it into doing unsafe things.
 
 If you're not comfortable with basic security and access control, don't run it.
 Recommended: pairing/allowlists, sandbox + least-privilege tools, keep secrets out of reach.
-Run regularly: node src/cli.js doctor`;
+Run regularly: aetherclaw doctor`;
 
 function readConfigSnapshot(configPath) {
   let config = {};
@@ -240,7 +240,7 @@ async function cmdOnboard() {
   let config = snapshot.config;
   if (snapshot.exists && !snapshot.valid) {
     aetherclawStep('Invalid config');
-    aetherclawBox('Invalid config', ['swarm_config.json exists but is invalid (e.g. missing model_routing).', 'Run: node src/cli.js doctor', 'Or continue to use defaults.']);
+    aetherclawBox('Invalid config', ['swarm_config.json exists but is invalid (e.g. missing model_routing).', 'Run: aetherclaw doctor', 'Or continue to use defaults.']);
     console.log('');
     const action = (await ttyQuestion('  [1] Exit and run doctor  [2] Continue with defaults (default: 2)', '2')).trim();
     if (action === '1') {
@@ -569,7 +569,7 @@ async function cmdOnboard() {
       console.log('  ⚠ Gateway setup skipped: ' + (e.message || e) + '\n');
     }
   } else if (process.platform !== 'darwin') {
-    console.log('  To run the gateway daemon: ' + chalk.cyan('node src/daemon.js') + '\n');
+    console.log('  To run the gateway daemon: ' + chalk.cyan('aetherclaw daemon') + '\n');
   }
   console.log('│');
 
@@ -595,12 +595,12 @@ async function cmdOnboard() {
   openclawBox('Control UI', [
     'Web UI: http://127.0.0.1:' + port + '/',
     'Gateway: reachable',
-    'Open the dashboard anytime: node src/cli.js dashboard'
+    'Open the dashboard anytime: aetherclaw dashboard'
   ]);
   console.log('│');
   openclawStep('Token');
   openclawBox('Token', openclawWrap(
-    'Gateway token: shared auth for the Gateway + Control UI. Stored in swarm_config.json (gateway.auth.token). Open the dashboard anytime: node src/cli.js dashboard'
+    'Gateway token: shared auth for the Gateway + Control UI. Stored in swarm_config.json (gateway.auth.token). Open the dashboard anytime: aetherclaw dashboard'
   ));
   console.log('│');
   console.log('  How do you want to hatch your bot?');
@@ -626,7 +626,7 @@ async function cmdOnboard() {
     });
     child.on('error', (err) => {
       console.log('  Could not start dashboard:', err.message);
-      console.log('  Run: node src/cli.js dashboard\n');
+      console.log('  Run: aetherclaw dashboard\n');
     });
     const openBrowser = () => {
       const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
@@ -647,14 +647,14 @@ async function cmdOnboard() {
     console.log('\n  Hatch in Telegram...\n');
     require('dotenv').config({ path: path.join(ROOT, '.env') });
     if (process.env.TELEGRAM_BOT_TOKEN) {
-      console.log('  Telegram is already connected. Run the gateway to receive messages: ' + chalk.cyan('node src/daemon.js') + '\n');
+      console.log('  Telegram is already connected. Run the gateway to receive messages: ' + chalk.cyan('aetherclaw daemon') + '\n');
     } else {
       try {
         await setupTelegram(path.join(ROOT, '.env'), {
           question: ttyQuestion,
           questionMasked: ttyQuestionMasked
         });
-        console.log('  Run the gateway daemon to receive Telegram messages: ' + chalk.cyan('node src/daemon.js') + '\n');
+        console.log('  Run the gateway daemon to receive Telegram messages: ' + chalk.cyan('aetherclaw daemon') + '\n');
       } catch (e) {
         console.log('  ⚠ Telegram setup: ' + (e.message || e) + '\n');
       }
@@ -664,18 +664,18 @@ async function cmdOnboard() {
     await cmdTui();
   } else {
     console.log('\n  Run later:');
-    console.log('    ' + chalk.cyan('node src/cli.js tui') + '       # Terminal chat');
-    console.log('    ' + chalk.cyan('node src/cli.js dashboard') + '   # Web dashboard');
-    console.log('    ' + chalk.cyan('node src/cli.js telegram-setup') + '   # Connect Telegram');
+    console.log('    ' + chalk.cyan('aetherclaw tui') + '       # Terminal chat');
+    console.log('    ' + chalk.cyan('aetherclaw dashboard') + '   # Web dashboard');
+    console.log('    ' + chalk.cyan('aetherclaw telegram-setup') + '   # Connect Telegram');
     if (process.env.TELEGRAM_BOT_TOKEN) {
-      console.log('    ' + chalk.dim('Telegram runs with the gateway daemon (node src/daemon.js).'));
+      console.log('    ' + chalk.dim('Telegram runs with the gateway daemon (aetherclaw daemon).'));
     }
     console.log('');
   }
 }
 
 function dashboardCmd() {
-  return 'node src/cli.js dashboard';
+  return 'aetherclaw dashboard';
 }
 
 function cmdStatus() {
@@ -915,7 +915,7 @@ async function cmdCode() {
     }
   }
   if (!task) {
-    console.log(chalk.red('Error: No task provided. Usage: node src/cli.js code [task] or pipe task via stdin.'));
+    console.log(chalk.red('Error: No task provided. Usage: aetherclaw code [task] or pipe task via stdin.'));
     process.exit(1);
   }
 
@@ -1009,7 +1009,7 @@ async function cmdRalph() {
 
 /**
  * Update install to latest from origin; preserve .env, swarm_config.json, and brain/ (soul, user, personality, etc.).
- * Usage: aetherclaw latest  (or node src/cli.js latest)
+ * Usage: aetherclaw latest
  */
 function cmdLatest() {
   const gitDir = path.join(ROOT, '.git');
@@ -1124,19 +1124,19 @@ async function main() {
   }
 
   console.log('Aether-Claw (Node)');
-  console.log('  node src/cli.js onboard        - first-time setup');
-  console.log('  node src/cli.js install        - same as onboard');
-  console.log('  node src/cli.js telegram-setup - connect or reconnect Telegram bot only');
-  console.log('  node src/cli.js tui            - chat TUI (gateway routing)');
-  console.log('  node src/cli.js telegram       - start Telegram bot only');
-  console.log('  node src/cli.js daemon         - gateway daemon (heartbeat + Telegram)');
-  console.log('  node src/cli.js dashboard      - web dashboard (status)');
-  console.log('  node src/cli.js doctor         - health check and suggestions');
-  console.log('  node src/cli.js latest        - update to latest from repo (keeps .env and config)');
-  console.log('  node src/cli.js code [task]   - plan then build (Cursor-style coding)');
-  console.log('  node src/cli.js ralph [N]     - PRD-driven autonomous loop (Ralph-style)');
-  console.log('  node src/cli.js status        - status');
-  console.log('  node src/cli.js index         - index brain files (optional: <file>)');
+  console.log('  aetherclaw onboard        - first-time setup');
+  console.log('  aetherclaw install        - same as onboard');
+  console.log('  aetherclaw telegram-setup - connect or reconnect Telegram bot only');
+  console.log('  aetherclaw tui            - chat TUI (gateway routing)');
+  console.log('  aetherclaw telegram       - start Telegram bot only');
+  console.log('  aetherclaw daemon         - gateway daemon (heartbeat + Telegram)');
+  console.log('  aetherclaw dashboard      - web dashboard (status)');
+  console.log('  aetherclaw doctor         - health check and suggestions');
+  console.log('  aetherclaw latest         - update to latest from repo (keeps .env and config)');
+  console.log('  aetherclaw code [task]    - plan then build (Cursor-style coding)');
+  console.log('  aetherclaw ralph [N]      - PRD-driven autonomous loop (Ralph-style)');
+  console.log('  aetherclaw status         - status');
+  console.log('  aetherclaw index         - index brain files (optional: <file>)');
 }
 
 main().catch((e) => {

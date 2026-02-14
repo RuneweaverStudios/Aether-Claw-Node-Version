@@ -2,7 +2,7 @@
 
 ## Current stack
 
-- **Runtime**: Node.js (no Python). TUI is `node src/cli.js tui`.
+- **Runtime**: Node.js (no Python). TUI is `aetherclaw tui`.
 - **Input**: Node `readline` interface on `process.stdin` / `process.stdout`. Requires an interactive TTY for the main loop.
 
 ## Behavior
@@ -13,9 +13,9 @@
 ## If TUI exits immediately or misbehaves
 
 1. **Run in a real terminal** (not from an IDE “run” that may not attach stdin):  
-   `node src/cli.js tui`
+   `aetherclaw tui`
 2. **Check stdin**: If stdin is piped or closed, readline may get EOF. Run without piping:  
-   `node src/cli.js tui` (no `|` or `< file`).
+   `aetherclaw tui` (no `|` or `< file`).
 3. **Onboarding hatch**: If you launch TUI from onboarding, the process is spawned with inherited stdio; it should work in a normal terminal.
 4. **Node version**: Node 18+.
 

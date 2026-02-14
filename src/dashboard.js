@@ -105,7 +105,7 @@ async function handleChatMessage(message) {
     return { error: 'Message is required' };
   }
   if (!process.env.OPENROUTER_API_KEY) {
-    return { error: 'OPENROUTER_API_KEY not set. Run: node src/cli.js onboard' };
+    return { error: 'OPENROUTER_API_KEY not set. Run: aetherclaw onboard' };
   }
   const sessionKey = resolveSessionKey({ channel: 'dashboard' });
   try {

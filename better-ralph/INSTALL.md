@@ -11,7 +11,7 @@ Better Ralph is included in Aether-Claw Node. No separate install.
 ### Prerequisites
 
 - [Aether-Claw Node](https://github.com/aether-claw/aether-claw-node) (this repo) cloned and set up
-- `OPENROUTER_API_KEY` in `.env` (run `node src/cli.js onboard` if needed)
+- `OPENROUTER_API_KEY` in `.env` (run `aetherclaw onboard` if needed)
 - A git repo with a `prd.json` in the project root
 
 ### Quick start
@@ -23,13 +23,13 @@ Better Ralph is included in Aether-Claw Node. No separate install.
    From the project root (where `prd.json` lives):
 
    ```bash
-   node src/cli.js ralph
+   aetherclaw ralph
    ```
 
    Or with a max iteration count:
 
    ```bash
-   node src/cli.js ralph 5
+   aetherclaw ralph 5
    ```
 
 3. **Progress**  
@@ -56,15 +56,15 @@ In `swarm_config.json`:
 If you use **OpenClaw** or another OpenClaw-compatible assistant:
 
 - Better Ralph is implemented as an **in-process loop** and **tools** inside Aether-Claw, not as a separate CLI. To use the same workflow elsewhere you can:
-  - **Run Aether-Claw** in the project and use `node src/cli.js ralph` (recommended), or
+  - **Run Aether-Claw** in the project and use `aetherclaw ralph` (recommended), or
   - **Reuse the workflow and PRD format**: maintain `prd.json` and `progress.txt`, and have your agent follow the same steps (get next story, implement, quality checks, commit, mark passed, append progress) using your platform’s file and git tools.
 
 ### Skill-style integration (Aether-Claw)
 
 Aether-Claw skills live in `skills/` and are signed JSON. To expose “Ralph” as a listed skill:
 
-1. Create an OpenClaw-style skill (e.g. `skills/ralph/SKILL.md`) that documents the Ralph workflow and points the user to `node src/cli.js ralph` and `better-ralph/README.md`.
-2. Install the skill into `skills/` and list it with `node src/cli.js status` or TUI `/skills`.
+1. Create an OpenClaw-style skill (e.g. `skills/ralph/SKILL.md`) that documents the Ralph workflow and points the user to `aetherclaw ralph` and `better-ralph/README.md`.
+2. Install the skill into `skills/` and list it with `aetherclaw status` or TUI `/skills`.
 
 The actual loop and tools are in `src/ralph.js` and `src/tools/index.js` (ralph_get_next_story, ralph_mark_story_passed, ralph_append_progress); the skill is a wrapper or doc entry point.
 

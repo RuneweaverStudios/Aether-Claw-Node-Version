@@ -4,9 +4,9 @@
 
 **Yes.** The “gateway daemon” is the thing that keeps background processes running in a persistent way.
 
-- **Without the daemon**: You run `aetherclaw telegram` or `aetherclaw daemon` (or `node src/cli.js ...`) yourself. When you close the terminal or the process exits, everything stops. Nothing runs in the background.
+- **Without the daemon**: You run `aetherclaw telegram` or `aetherclaw daemon` yourself. When you close the terminal or the process exits, everything stops. Nothing runs in the background.
 - **With the daemon**: On macOS, the installer registers a **LaunchAgent** (`com.aetherclaw.heartbeat`) that runs **Node** as a **long-lived process**:
-  - **Command**: `aetherclaw daemon` (or `node src/daemon.js` / `node src/cli.js daemon`)
+  - **Command**: `aetherclaw daemon`
   - **Starts at login** (`RunAtLoad`)
   - **Restarts if it crashes** (`KeepAlive`)
   - **Runs in the background** (no terminal needed)
@@ -50,35 +50,35 @@ So “bot config” = **`.env`** (who you are on OpenRouter + Telegram) + **`swa
 
 ### 1. **Interfaces**
 
-- **TUI** – `aetherclaw tui` (or `node src/cli.js tui`)  
+- **TUI** – `aetherclaw tui`  
   Terminal chat with gateway routing, slash commands, memory search, and indexing.
 - **Telegram** – Bot runs either:
   - Manually: `aetherclaw telegram`, or  
   - Automatically as a subprocess of the **gateway daemon** (when installed via install.sh).
-- **Web dashboard** – `aetherclaw dashboard` (or `node src/cli.js dashboard`) (Node HTTP server; Chat, Status, Config tabs; markdown + code blocks; POST `/api/chat`).
+- **Web dashboard** – `aetherclaw dashboard` (Node HTTP server; Chat, Status, Config tabs; markdown + code blocks; POST `/api/chat`).
 
 ### 2. **Coding tasks (OpenClaw-style)**
 
 For **action**-classified messages, the agent runs an **agent loop** with **27+ tools**: exec, bash, process, read_file, write_file, edit, apply_patch, memory_search, memory_get, web_search, web_fetch, message (Telegram), cron, gateway, sessions_list/history/status, agents_list, image (vision); **ralph_get_next_story**, **ralph_mark_story_passed**, **ralph_append_progress** (Better Ralph workflow); plus extras (doctor, notify, git_*, json_read/write, run_tests, lint, etc.). canvas is implemented (Playwright; optional); browser/nodes/sessions_send/sessions_spawn are stubs. See `docs/OPENCLAW_TOOLS_AND_WORKFLOWS.md`. Exec and file tools respect the kill switch and safety gate.
 
-- **Code (plan-then-build)** – `aetherclaw code [task]` (or `node src/cli.js code [task]`)  
+- **Code (plan-then-build)** – `aetherclaw code [task]`  
   Cursor-style workflow: a **planning agent** (reasoning model) produces a structured plan, then a **build agent** (action model + tools) implements it. Use `--plan-only` to only print the plan, or `--no-plan` to run build only.
 
-- **Ralph (PRD-driven autonomous loop)** – `aetherclaw ralph [max_iterations]` (or `node src/cli.js ralph ...`)  
+- **Ralph (PRD-driven autonomous loop)** – `aetherclaw ralph [max_iterations]`  
   Better Ralph: reads `prd.json`, runs one user story per iteration (get next story → implement → quality checks → commit → mark passed → append progress), until all stories have `passes: true` or max iterations. Uses dedicated tools: `ralph_get_next_story`, `ralph_mark_story_passed`, `ralph_append_progress`. Progress lives in `progress.txt`; optional archive on branch change. See `better-ralph/` and [Ralph](https://github.com/snarktank/ralph).
 
 ### 3. **Onboarding & setup**
 
-- **Onboard** – `aetherclaw onboard` (or `node src/cli.js onboard`)  
+- **Onboard** – `aetherclaw onboard`  
   First-time setup: OpenRouter API key (masked), model choice (reasoning + action), brain dir creation (including `BOOTSTRAP.md` for first-run conversation), optional Telegram pairing, then hatch (TUI / Web / Exit). Progress indicator shows current step (1–5).
-- **Telegram-only** – `aetherclaw telegram-setup` (or `node src/cli.js telegram-setup`)  
+- **Telegram-only** – `aetherclaw telegram-setup`  
   (Re)connect Telegram (token + pairing code); writes `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` to `.env`.
 
 ### 4. **Brain & personality (conversational config)**
 
 - **Brain** – `brain/` (user.md, soul.md, memory.md, BOOTSTRAP.md, optional identity.md). First-run is **conversational** (OpenClaw-style): on first TUI open, a **scripted** first message from Aether-Claw is shown; then the LLM continues the conversation and uses tools (`write_file`, `delete_file`) to update brain files. When done, the agent deletes `brain/BOOTSTRAP.md`. Bootstrap files are injected into the system prompt each turn.
 - **Memory** – Free-form text in `brain/memory.md` (and optionally other files). Indexed into `brain/brain_index.json` for semantic-style search.
-- **Index** – `aetherclaw index [file]` (or `node src/cli.js index [file]`)  
+- **Index** – `aetherclaw index [file]`  
   (Re)index brain files for memory search. Run after editing memory.
 
 ### 5. **TUI slash commands & gateway**
@@ -93,7 +93,7 @@ For **action**-classified messages, the agent runs an **agent loop** with **27+ 
 
 ### 6. **Gateway daemon (persistence + background work)**
 
-- **What it is**: One long-lived **Node** process (`node src/daemon.js`) managed by the macOS LaunchAgent. **No Python required.**
+- **What it is**: One long-lived **Node** process (daemon) managed by the macOS LaunchAgent. **No Python required.**
 - **What it runs**:
   - **Heartbeat loop** – Interval from config (`heartbeat.interval_minutes`, default 30). Runs memory index update (indexes `brain/*.md` into `brain_index.json`), git scan, skill audit summary (logs when any skill failed audit).
   - **Telegram bot** – Same process polls Telegram and replies via OpenRouter when `TELEGRAM_BOT_TOKEN` is set in `.env`.
@@ -116,7 +116,7 @@ For **action**-classified messages, the agent runs an **agent loop** with **27+ 
 
 ## Short summary
 
-- **Persistence** = gateway daemon = LaunchAgent running `node src/daemon.js`, which runs the heartbeat loop and (when configured) the Telegram bot in the same process.
+- **Persistence** = gateway daemon = LaunchAgent running the daemon from the install directory, which runs the heartbeat loop and (when configured) the Telegram bot in the same process.
 - **Bot config** = `.env` (OpenRouter + Telegram) + `swarm_config.json` (model tiers, optional fallback). Telegram “is on” when token (and pairing) is set; it runs either manually or via the daemon.
 - **Features** = TUI (gateway-routed chat, memory, index, slash commands, /new, /reset; action path uses agent loop with tools), Telegram (same LLM + config), onboarding/personality, brain/memory/index, web dashboard (Chat + Status + Config, markdown + code blocks), **code** (plan-then-build), **ralph** (PRD-driven autonomous loop with Better Ralph tools), doctor (health check), model failover, cron (config-based jobs), configurable heartbeat, and background heartbeat + Telegram when the gateway daemon is installed.
 
@@ -129,7 +129,7 @@ For **action**-classified messages, the agent runs an **agent loop** with **27+ 
 | Capability | OpenClaw | Aether-Claw Node |
 |------------|----------|------------------|
 | **Onboarding wizard** | `openclaw onboard` | ✅ `aetherclaw onboard` |
-| **Gateway daemon (persistent)** | launchd/systemd, WS gateway | ✅ LaunchAgent runs `node src/daemon.js` (heartbeat + Telegram) |
+| **Gateway daemon (persistent)** | launchd/systemd, WS gateway | ✅ LaunchAgent runs daemon from install dir (heartbeat + Telegram) |
 | **Telegram** | grammY, pairing | ✅ Pairing code flow, same process in daemon |
 | **DM / pairing** | Pairing code for unknown senders | ✅ Telegram pairing code before processing |
 | **Chat commands** | /status, /new, /reset, /compact, /think, etc. | ✅ /status, /new, /reset, /memory, /skills, /index, /clear, /help |

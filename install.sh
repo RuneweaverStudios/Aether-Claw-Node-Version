@@ -24,7 +24,7 @@ INSTALLER_RAW="https://raw.githubusercontent.com/RuneweaverStudios/Aether-Claw-N
 ensure_onboard() {
   if [ ! -f "$INSTALL_DIR/.env" ] || ! grep -q "OPENROUTER_API_KEY=.\+" "$INSTALL_DIR/.env" 2>/dev/null; then
     printf "\n${CYAN}API key required. Running onboarding (OpenRouter key, model, etc.)...${NC}\n\n"
-    (cd "$INSTALL_DIR" && node src/cli.js onboard < /dev/tty)
+    (cd "$INSTALL_DIR" && aetherclaw onboard < /dev/tty)
   fi
 }
 
@@ -37,17 +37,15 @@ if [ -d "$INSTALL_DIR" ] && [ "$SCRIPT_DIR" = "$(cd "$INSTALL_DIR" && pwd)" ] &&
     fi
 fi
 
-NO_GLOBAL=""
 while [[ $# -gt 0 ]]; do
     case $1 in
         --branch|-b) BRANCH="$2"; shift 2 ;;
         --dir|-d) INSTALL_DIR="$2"; shift 2 ;;
-        --no-global) NO_GLOBAL=1; shift ;;
         --help|-h)
             echo "Usage: curl -sSL <url> | bash -s -- [OPTIONS]"
             echo "  --branch, -b      Git branch (default: main)"
             echo "  --dir, -d DIR     Install directory (default: ~/.aether-claw-node)"
-            echo "  --no-global       Do not link 'aetherclaw' command to PATH"
+            echo "  Aether-Claw is installed globally so 'aetherclaw' is on your PATH."
             exit 0
             ;;
         *) shift ;;
@@ -312,11 +310,11 @@ PLISTEOF
     if [ "$launch_choice" = "1" ]; then
       ensure_onboard
       printf "\n${CYAN}Launching TUI...${NC}\n\n"
-      cd "$INSTALL_DIR" && node src/cli.js tui < /dev/tty
+      cd "$INSTALL_DIR" && aetherclaw tui < /dev/tty
     elif [ "$launch_choice" = "2" ]; then
       ensure_onboard
       printf "\n${CYAN}Launching Web dashboard...${NC}\n\n"
-      cd "$INSTALL_DIR" && node src/cli.js dashboard
+      cd "$INSTALL_DIR" && aetherclaw dashboard
     fi
   fi
   printf "\n"
@@ -423,10 +421,10 @@ if [ -d "$INSTALL_DIR" ]; then
                     if [ -d "$INSTALL_DIR/.git" ] && command -v git &>/dev/null; then
                         git pull --quiet 2>/dev/null || true
                     fi
-                    node src/cli.js telegram-setup --yes < /dev/tty
+                    aetherclaw telegram-setup --yes < /dev/tty
                     exit 0
                 fi
-                if command -v aetherclaw &>/dev/null; then printf "  Run later: ${CYAN}aetherclaw telegram-setup${NC}\n\n"; else printf "  Run later: ${CYAN}cd $INSTALL_DIR && node src/cli.js telegram-setup${NC}\n\n"; fi
+                printf "  Run later: ${CYAN}aetherclaw telegram-setup${NC}\n\n"
                 gateway_prompt
                 exit 0
                 ;;
@@ -459,9 +457,9 @@ if [ -d "$INSTALL_DIR" ]; then
                 fi
                 start_choice=${start_choice:-2}
                 case "$start_choice" in
-                    1) node src/cli.js onboard < /dev/tty ;;
-                    2) ensure_onboard; node src/cli.js tui < /dev/tty ;;
-                    *) if command -v aetherclaw &>/dev/null; then printf "  Run: ${CYAN}aetherclaw tui${NC}\n\n"; else printf "  Run: ${CYAN}cd $INSTALL_DIR && node src/cli.js tui${NC}\n\n"; fi ;;
+                    1) aetherclaw onboard < /dev/tty ;;
+                    2) ensure_onboard; aetherclaw tui < /dev/tty ;;
+                    *) printf "  Run: ${CYAN}aetherclaw tui${NC}\n\n" ;;
                 esac
                 exit 0
                 ;;
@@ -511,13 +509,11 @@ npm install --silent
 # Ensure CLI is executable so 'aetherclaw' works when linked globally
 chmod +x src/cli.js 2>/dev/null || true
 
-# Link global command so 'aetherclaw' works from anywhere (unless --no-global)
-if [ -z "$NO_GLOBAL" ]; then
-    printf "${GREEN}✓${NC} Linking global command: aetherclaw\n"
-    if ! npm install -g . 2>/dev/null; then
-        printf "  ${YELLOW}⚠${NC} Could not link globally (permission or prefix). Run from install dir: ${CYAN}node src/cli.js <cmd>${NC}\n"
-        printf "  Or run later: ${CYAN}cd $INSTALL_DIR && npm install -g .${NC}\n\n"
-    fi
+# Global install: link 'aetherclaw' so it works from anywhere
+printf "${GREEN}✓${NC} Installing globally (aetherclaw)\n"
+if ! npm install -g . 2>/dev/null; then
+    printf "  ${YELLOW}⚠${NC} Global install failed (permission or prefix). Try: ${CYAN}sudo npm install -g .${NC}\n"
+    printf "  Or: ${CYAN}cd $INSTALL_DIR && npm install -g .${NC}\n\n"
 fi
 
 printf "\n${GREEN}✓ Installation complete.${NC}\n\n"
@@ -550,31 +546,21 @@ cd "$INSTALL_DIR"
 case "$choice" in
     1)
         printf "\n${CYAN}Running onboarding...${NC}\n\n"
-        node src/cli.js onboard < /dev/tty
+        aetherclaw onboard < /dev/tty
         ;;
     2)
         ensure_onboard
         printf "\n${CYAN}Launching TUI...${NC}\n\n"
-        node src/cli.js tui < /dev/tty
+        aetherclaw tui < /dev/tty
         ;;
     3)
         printf "\n${YELLOW}Exiting. Run manually:${NC}\n"
-        if command -v aetherclaw &>/dev/null; then
-            printf "  aetherclaw onboard   # first-time setup\n"
-            printf "  aetherclaw tui       # chat\n"
-            printf "  aetherclaw latest    # update from repo\n\n"
-        else
-            printf "  cd $INSTALL_DIR\n"
-            printf "  node src/cli.js onboard   # first-time setup\n"
-            printf "  node src/cli.js tui       # chat\n\n"
-        fi
+        printf "  aetherclaw onboard   # first-time setup\n"
+        printf "  aetherclaw tui       # chat\n"
+        printf "  aetherclaw latest    # update from repo\n\n"
         ;;
     *)
         printf "\n${YELLOW}Invalid choice. Exiting.${NC}\n"
-        if command -v aetherclaw &>/dev/null; then
-            printf "  Run: ${CYAN}aetherclaw onboard${NC}\n\n"
-        else
-            printf "  Run: ${CYAN}cd $INSTALL_DIR && node src/cli.js onboard${NC}\n\n"
-        fi
+        printf "  Run: ${CYAN}aetherclaw onboard${NC}\n\n"
         ;;
 esac

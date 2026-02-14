@@ -1,6 +1,6 @@
 # TUI Troubleshooting (Node)
 
-The TUI is the Node chat interface: `node src/cli.js tui`.
+The TUI is the Node chat interface: `aetherclaw tui`.
 
 ## TUI exits right away or says "Goodbye!"
 
@@ -10,15 +10,15 @@ The TUI is the Node chat interface: `node src/cli.js tui`.
 
 1. Run in a normal terminal (not via an IDE “Run” that might not attach stdin):
    ```bash
-   node src/cli.js tui
+   aetherclaw tui
    ```
 2. Don’t pipe stdin:
    ```bash
    # Wrong:
-   echo "" | node src/cli.js tui
+   echo "" | aetherclaw tui
 
    # Right:
-   node src/cli.js tui
+   aetherclaw tui
    ```
 3. Check if stdin is a TTY:
    ```bash
@@ -28,7 +28,7 @@ The TUI is the Node chat interface: `node src/cli.js tui`.
 
 ## Commands not working
 
-- **/status, /memory, /skills, /index**: Require project files (e.g. `swarm_config.json`, `brain/`, `skills/`). Run from the project root: `cd /path/to/newclawnode && node src/cli.js tui`.
+- **/status, /memory, /skills, /index**: Require project files (e.g. `swarm_config.json`, `brain/`, `skills/`). Run from the project root: `cd /path/to/newclawnode && aetherclaw tui`.
 - **Action/coding**: Needs `OPENROUTER_API_KEY` in `.env`. Action path uses the agent loop with tools; if the model returns tool calls, they are executed (exec, read_file, etc.) and results are fed back.
 
 ## Node version

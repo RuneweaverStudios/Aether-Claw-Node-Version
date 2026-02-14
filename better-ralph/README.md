@@ -54,10 +54,10 @@ From the project root (where `prd.json` lives):
 
 ```bash
 # Default max iterations (10)
-node src/cli.js ralph
+aetherclaw ralph
 
 # Custom max iterations
-node src/cli.js ralph 5
+aetherclaw ralph 5
 ```
 
 Before the first run, create `prd.json` (e.g. copy from `better-ralph/prd.json.example`). The first run will create `progress.txt` if it doesn’t exist.

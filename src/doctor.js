@@ -22,7 +22,7 @@ function runChecks() {
   // OPENROUTER_API_KEY
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey || apiKey.length < 10) {
-    results.push(check('OPENROUTER_API_KEY', false, 'Not set or invalid', 'Run: node src/cli.js onboard'));
+    results.push(check('OPENROUTER_API_KEY', false, 'Not set or invalid', 'Run: aetherclaw onboard'));
   } else {
     results.push(check('OPENROUTER_API_KEY', true, 'Set'));
   }
@@ -30,7 +30,7 @@ function runChecks() {
   // .env exists
   const envPath = path.join(ROOT, '.env');
   if (!fs.existsSync(envPath)) {
-    results.push(check('.env', false, 'Missing', 'Run: node src/cli.js onboard'));
+    results.push(check('.env', false, 'Missing', 'Run: aetherclaw onboard'));
   } else {
     results.push(check('.env', true, 'Exists'));
   }
@@ -41,18 +41,18 @@ function runChecks() {
   try {
     config = loadConfig(configPath);
     if (!config.model_routing || (!config.model_routing.tier_1_reasoning?.model && !config.model_routing.tier_2_action?.model)) {
-      results.push(check('swarm_config.json', false, 'Missing model_routing', 'Run: node src/cli.js onboard'));
+      results.push(check('swarm_config.json', false, 'Missing model_routing', 'Run: aetherclaw onboard'));
     } else {
       results.push(check('swarm_config.json', true, 'Valid'));
     }
   } catch (e) {
-    results.push(check('swarm_config.json', false, e.message || 'Invalid', 'Run: node src/cli.js onboard'));
+    results.push(check('swarm_config.json', false, e.message || 'Invalid', 'Run: aetherclaw onboard'));
   }
 
   // brain dir
   const brainDir = path.join(ROOT, 'brain');
   if (!fs.existsSync(brainDir)) {
-    results.push(check('brain/', false, 'Missing', 'Run: node src/cli.js onboard'));
+    results.push(check('brain/', false, 'Missing', 'Run: aetherclaw onboard'));
   } else {
     const mdCount = fs.readdirSync(brainDir).filter((n) => n.endsWith('.md')).length;
     results.push(check('brain/', true, `${mdCount} .md files`));
@@ -61,14 +61,14 @@ function runChecks() {
   // brain index
   const indexPath = path.join(brainDir, 'brain_index.json');
   if (fs.existsSync(brainDir) && !fs.existsSync(indexPath)) {
-    results.push(check('brain_index', false, 'Not indexed', 'Run: node src/cli.js index'));
+    results.push(check('brain_index', false, 'Not indexed', 'Run: aetherclaw index'));
   } else if (fs.existsSync(indexPath)) {
     try {
       const index = readIndex(ROOT);
       const files = Object.keys(index.files || {}).length;
       results.push(check('brain_index', true, `${files} files indexed`));
     } catch (e) {
-      results.push(check('brain_index', false, 'Invalid', 'Run: node src/cli.js index'));
+      results.push(check('brain_index', false, 'Invalid', 'Run: aetherclaw index'));
     }
   }
 
@@ -138,7 +138,7 @@ function cmdDoctor() {
   }
   console.log('');
   if (hasFail) {
-    console.log('  Run onboard to fix setup: node src/cli.js onboard\n');
+    console.log('  Run onboard to fix setup: aetherclaw onboard\n');
   }
 }
 
