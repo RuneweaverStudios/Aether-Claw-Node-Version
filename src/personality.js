@@ -130,6 +130,7 @@ function updateSoul(root, agentName, vibe, dynamic) {
 module.exports = {
   isFirstRun,
   isBootstrapActive,
+  hasEstablishedSoul,
   getBootstrapPath,
   getBootstrapFirstMessage,
   getBootstrapContext,

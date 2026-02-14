@@ -22,9 +22,9 @@ const { callLLM } = require('./api');
 const { runAgentLoop } = require('./agent-loop');
 const { indexAll, getBrainDir, searchMemory, readIndex, indexFile } = require('./brain');
 const { createReplyDispatcher, resolveSessionKey } = require('./gateway');
-const { isFirstRun, updateUserProfile, updateSoul, getBootstrapFirstMessage, getBootstrapContext, SCRIPTED_USER_WAKE_UP } = require('./personality');
+const { isFirstRun, isBootstrapActive, hasEstablishedSoul, updateUserProfile, updateSoul, getBootstrapFirstMessage, getBootstrapContext, SCRIPTED_USER_WAKE_UP } = require('./personality');
 const { setupTelegram, sendTelegramMessage, sendChatAction } = require('./telegram-setup');
-const { listAllSkillsWithAuditStatus, listEligibleSkills } = require('./openclaw-skills');
+const { listAllSkillsWithAuditStatus, listEligibleSkills, discoverSkillDirs } = require('./openclaw-skills');
 const axios = require('axios');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -462,6 +462,8 @@ async function cmdOnboard() {
     fs.writeFileSync(path.join(brainDir, 'memory.md'), '# Memory\n\nLong-term memory log.\n', 'utf8');
     console.log('  ✓ Created brain/soul.md, user.md, memory.md\n');
     seedBootstrapIfNeeded(ROOT);
+  } else if (!hasEstablishedSoul(ROOT) && !isBootstrapActive(ROOT)) {
+    seedBootstrapIfNeeded(ROOT);
   }
   const indexResults = indexAll(ROOT);
   console.log('  ✓ Indexed ' + Object.keys(indexResults).length + ' brain files\n');
@@ -517,13 +519,15 @@ async function cmdOnboard() {
       console.log('│');
     }
     openclawStep('Configure DM access policies now? (default: pairing)');
-    const doDm = (await ttyQuestion('  Yes / No (default: Yes)', 'Yes')).trim().toLowerCase();
-    openclawStepValue(doDm === 'yes' || doDm === 'y' || doDm === '' ? 'Yes' : 'No');
+    const doDm = (await ttyQuestion('  Yes / No (default: No)', 'No')).trim().toLowerCase();
+    openclawStepValue(doDm === 'yes' || doDm === 'y' ? 'Yes' : 'No');
     console.log('│');
-    openclawStep('Telegram DM policy');
-    openclawStepValue('Pairing (recommended)');
-    console.log('  Updated config / .env');
-    console.log('│');
+    if (doDm === 'yes' || doDm === 'y') {
+      openclawStep('Telegram DM policy');
+      openclawStepValue('Pairing (recommended)');
+      console.log('  Updated config / .env');
+      console.log('│');
+    }
   }
 
   openclawStep('Skills status');
@@ -542,12 +546,32 @@ async function cmdOnboard() {
   const doSkills = (await ttyQuestion('  Yes / No (default: Yes)', 'Yes')).trim().toLowerCase();
   openclawStepValue(doSkills === 'yes' || doSkills === 'y' || doSkills === '' ? 'Yes' : 'No');
   console.log('│');
+  let packageManager = 'npm';
   if (doSkills === 'yes' || doSkills === 'y' || doSkills === '') {
     openclawStep('Preferred node manager for skill installs');
-    openclawStepValue('npm');
+    const pmChoice = (await ttyQuestion('  npm / pnpm / yarn (default: npm)', 'npm')).trim().toLowerCase();
+    packageManager = (pmChoice === 'pnpm' || pmChoice === 'yarn') ? pmChoice : 'npm';
+    openclawStepValue(packageManager);
     console.log('│');
+    const skillDirsWithPkg = discoverSkillDirs(ROOT)
+      .map(({ dir }) => dir)
+      .filter(dir => fs.existsSync(path.join(dir, 'package.json')));
+    const hasMissingReqs = missingCount > 0;
     openclawStep('Install missing skill dependencies');
-    openclawStepValue('Skip for now');
+    const installDefault = hasMissingReqs ? 'Yes' : 'Skip for now';
+    const installChoice = (await ttyQuestion('  Yes / Skip for now (default: ' + installDefault + ')', installDefault)).trim().toLowerCase();
+    const doInstall = installChoice === 'yes' || installChoice === 'y';
+    openclawStepValue(doInstall ? 'Yes' : 'Skip for now');
+    if (doInstall && skillDirsWithPkg.length > 0) {
+      const installCmd = packageManager === 'yarn' ? 'yarn' : packageManager === 'pnpm' ? 'pnpm install' : 'npm install';
+      for (const dir of skillDirsWithPkg) {
+        try {
+          execSync(installCmd, { cwd: dir, stdio: 'inherit' });
+        } catch (e) {
+          console.log('  ⚠ Install in ' + path.relative(ROOT, dir) + ' failed: ' + (e.message || e));
+        }
+      }
+    }
     console.log('│');
   }
   openclawStep('Hooks');
@@ -756,6 +780,10 @@ async function cmdTui() {
   const reasoningModel = config.model_routing?.tier_1_reasoning?.model || 'anthropic/claude-3.7-sonnet';
   const actionModel = config.model_routing?.tier_2_action?.model || 'anthropic/claude-3.5-haiku';
 
+  if (!hasEstablishedSoul(ROOT) && !isBootstrapActive(ROOT)) {
+    seedBootstrapIfNeeded(ROOT);
+  }
+
   printBanner();
 
   if (isFirstRun(ROOT)) {
@@ -859,7 +887,7 @@ async function cmdTelegram() {
   }
   const config = loadConfig(path.join(ROOT, 'swarm_config.json'));
   const model = config.model_routing?.tier_1_reasoning?.model || 'anthropic/claude-3.7-sonnet';
-  const baseSystemPrompt = 'You are Aether-Claw, a secure AI assistant. Be helpful and concise. If the user asks to connect GitHub or whether Aether-Claw is connected to GitHub, use the github_connect tool and share the result or instructions. Reply only in natural language and markdown. Do not include raw tool-call or function-call syntax in your message.';
+  const baseSystemPrompt = 'You are Aether-Claw, a secure AI assistant. Be helpful and concise. If the user asks to connect GitHub or whether Aether-Claw is connected to GitHub, use the github_connect tool and share the result or instructions. Reply only in natural language and markdown. Do not include raw tool-call or function-call syntax in your message.\n\nYour identity and config live in brain/: brain/soul.md (your goals, soul), brain/identity.md (name, vibe), brain/user.md (user preferences), brain/memory.md (memory). When the user asks to see your soul, identity, or config, use read_file on the relevant brain/ file and share it.';
   const telegramChatsReceivedFirstReply = new Set();
   console.log('Telegram bot running. Press Ctrl+C to stop.\n');
   let offset = 0;
