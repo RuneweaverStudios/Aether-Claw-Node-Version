@@ -56,7 +56,7 @@ BRAVE_API_KEY=optional (for web_search tool)
 - **Gateway routing**: Chat, action (coding), memory, reflect — each uses the right model and system prompt.
 - **Coding tasks**: For “action” messages, the agent uses tools: exec, process, read_file, write_file, edit, apply_patch, memory_search, memory_get, web_search, web_fetch, message (Telegram), cron, gateway, sessions, image (vision). See `docs/OPENCLAW_TOOLS_AND_WORKFLOWS.md`.
 - **Brain**: `brain/*.md` indexed for memory search; personality in soul.md / user.md.
-- **Skills**: OpenClaw-style (SKILL.md directories in `skills/`). Install from ClawHub (`clawhub install <slug>`). Each skill is audited for security/prompt-injection before use; results cached. Dashboard **Security** tab shows warnings and audit status.
+- **Skills**: OpenClaw-style (SKILL.md directories in `skills/`). Bundled: **cursor-agent** (open projects in Cursor, run Cursor CLI agent), **composio-twitter** (X/Twitter research via Composio, zero API cost). Install more from ClawHub (`clawhub install <slug>`). Each skill is audited for security/prompt-injection before use; results cached. Dashboard **Security** tab shows warnings and audit status.
 - **Safety**: Kill switch and safety gate (configurable) gate exec and file tools.
 - **Daemon**: Installer can register a LaunchAgent that runs `node src/daemon.js` (heartbeat + Telegram). Heartbeat interval is configurable in `swarm_config.json` (`heartbeat.interval_minutes`).
 
@@ -75,6 +75,8 @@ BRAVE_API_KEY=optional (for web_search tool)
 - `swarm_config.json` – Model routing, safety_gate, heartbeat, cron.jobs
 - `docs/ARCHITECTURE_AND_FEATURES.md` – Architecture and config
 - `docs/OPENCLAW_TOOLS_AND_WORKFLOWS.md` – OpenClaw tool list and Aether-Claw parity
+- `skills/cursor-agent/` – Cursor Agent skill (SKILL.md + scripts)
+- `skills/composio-twitter/` – X Research skill (Composio; requires Bun + `COMPOSIO_API_KEY`). See [skills/composio-twitter/README.md](skills/composio-twitter/README.md) for setup.
 
 ## Documentation
 

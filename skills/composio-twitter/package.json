@@ -1,0 +1,1 @@
+{"name":"composio-twitter","version":"1.0.0","description":"X/Twitter research agent powered by Composio (zero API cost)","type":"module","scripts":{"search":"bun run x-search.ts","profile":"bun run x-search.ts","thread":"bun run x-search.ts"},"dependencies":{},"devDependencies":{"bun-types":"latest"}}
