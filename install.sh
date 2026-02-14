@@ -407,11 +407,11 @@ npm install --silent
 
 printf "\n${GREEN}✓ Installation complete.${NC}\n\n"
 
-# Fresh install: run onboarding (OpenRouter key, model, etc.) before offering TUI/Web or gateway
-ensure_onboard
-
-# Gateway daemon (macOS): check / restart / reinstall
+# Gateway daemon (macOS): install/restart before onboarding so gateway is before Telegram
 gateway_prompt
+
+# Fresh install: run onboarding (OpenRouter key, model, gateway step, Telegram, etc.)
+ensure_onboard
 
 # Interactive prompt
 printf "${CYAN}╔════════════════════════════════════════════════════╗${NC}\n"

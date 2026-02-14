@@ -19,7 +19,7 @@ const axios = require('axios');
 const ROOT = path.resolve(__dirname, '..');
 const TELEGRAM_API = 'https://api.telegram.org/bot';
 
-const ONBOARD_STEPS_TOTAL = 5;
+const ONBOARD_STEPS_TOTAL = 6;
 
 const BANNER = `
 ╔════════════════════════════════════════════════════╗
@@ -282,7 +282,7 @@ async function cmdOnboard() {
   console.log('  ✓ Model config saved to swarm_config.json\n');
 
   renderProgress(3, ONBOARD_STEPS_TOTAL, 'Brain');
-  console.log('  [3/5] 🧠 Brain');
+  console.log('  [3/6] 🧠 Brain');
   const brainDir = getBrainDir(ROOT);
   if (!fs.existsSync(path.join(brainDir, 'soul.md'))) {
     fs.writeFileSync(path.join(brainDir, 'soul.md'), '# Soul\n\nAgent identity and goals.\n', 'utf8');
@@ -294,8 +294,21 @@ async function cmdOnboard() {
   const indexResults = indexAll(ROOT);
   console.log('  ✓ Indexed ' + Object.keys(indexResults).length + ' brain files\n');
 
-  renderProgress(4, ONBOARD_STEPS_TOTAL, 'Telegram');
-  // [4/5] Telegram
+  renderProgress(4, ONBOARD_STEPS_TOTAL, 'Gateway');
+  console.log('  [4/6] 🚪 Gateway');
+  if (process.platform === 'darwin') {
+    try {
+      const { runGatewaySetup } = require('./gateway-install');
+      await runGatewaySetup(ROOT, { ttyQuestion });
+    } catch (e) {
+      console.log('  ⚠ Gateway setup skipped: ' + (e.message || e) + '\n');
+    }
+  } else {
+    console.log('  To run the gateway daemon: ' + chalk.cyan('node src/daemon.js') + '\n');
+  }
+
+  renderProgress(5, ONBOARD_STEPS_TOTAL, 'Telegram');
+  console.log('  [5/6] Telegram');
   try {
     await setupTelegram(path.join(ROOT, '.env'), {
       question: ttyQuestion,
@@ -305,34 +318,64 @@ async function cmdOnboard() {
     console.log('  ⚠ Telegram setup skipped: ' + (e.message || e) + '\n');
   }
 
-  renderProgress(5, ONBOARD_STEPS_TOTAL, 'Complete');
-  console.log('  [5/5] ✅ Onboarding complete.\n');
+  renderProgress(6, ONBOARD_STEPS_TOTAL, 'Complete');
+  console.log('  [6/6] ✅ Onboarding complete.\n');
   console.log('  ' + chalk.cyan('Ready to hatch!') + '\n');
   console.log('  [1] Hatch into TUI (terminal chat)');
   console.log('  [2] Hatch into Web UI (browser dashboard)');
-  console.log('  [3] Exit (run manually later)\n');
-  const hatch = (await ttyQuestion('  Choose [1-3] (default: 1)', '1')).trim();
+  console.log('  [3] Hatch in Telegram (connect bot)');
+  console.log('  [4] Exit (run manually later)\n');
+  const hatch = (await ttyQuestion('  Choose [1-4] (default: 1)', '1')).trim();
   if (hatch === '2') {
-    console.log('\n  🐣 Launching Web dashboard...\n');
     const { spawn } = require('child_process');
+    const port = Number(process.env.PORT) || 8501;
+    const url = `http://localhost:${port}`;
+    console.log('\n  🐣 Launching Web dashboard...\n');
     const child = spawn(process.execPath, [path.join(ROOT, 'src', 'dashboard.js')], {
       cwd: ROOT,
-      stdio: 'inherit'
+      stdio: [null, 'inherit', 'inherit'],
+      env: { ...process.env, PORT: String(port) }
     });
     child.on('error', (err) => {
       console.log('  Could not start dashboard:', err.message);
       console.log('  Run: node src/cli.js dashboard\n');
     });
+    const openBrowser = () => {
+      const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+      try {
+        require('child_process').execSync(`${cmd} "${url}"`, { stdio: 'ignore' });
+      } catch (_) {}
+    };
+    setTimeout(() => {
+      console.log('  Dashboard: ' + chalk.cyan(url));
+      console.log('  Opening browser...');
+      openBrowser();
+      console.log('  Press Enter to open in browser again, or Ctrl+C to stop the server.\n');
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      rl.on('line', () => { openBrowser(); });
+    }, 1800);
     await new Promise((res) => child.on('close', res));
-  } else if (hatch !== '3') {
+  } else if (hatch === '3') {
+    console.log('\n  🐣 Hatch in Telegram...\n');
+    try {
+      await setupTelegram(path.join(ROOT, '.env'), {
+        question: ttyQuestion,
+        questionMasked: ttyQuestionMasked
+      });
+      console.log('  Run the gateway daemon to receive Telegram messages: ' + chalk.cyan('node src/daemon.js') + '\n');
+    } catch (e) {
+      console.log('  ⚠ Telegram setup: ' + (e.message || e) + '\n');
+    }
+  } else if (hatch !== '4') {
     console.log('\n  🐣 Hatching into TUI...\n');
     await cmdTui();
   } else {
     console.log('\n  Run later:');
     console.log('    ' + chalk.cyan('node src/cli.js tui') + '       # Terminal chat');
     console.log('    ' + chalk.cyan('node src/cli.js dashboard') + '   # Web dashboard');
+    console.log('    ' + chalk.cyan('node src/cli.js telegram-setup') + '   # Connect Telegram');
     if (process.env.TELEGRAM_BOT_TOKEN) {
-      console.log('    ' + chalk.dim('Telegram runs with the gateway daemon (install.sh → gateway).'));
+      console.log('    ' + chalk.dim('Telegram runs with the gateway daemon (node src/daemon.js).'));
     }
     console.log('');
   }
