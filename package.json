@@ -15,7 +15,8 @@
     "daemon": "node src/daemon.js",
     "dashboard": "node src/cli.js dashboard",
     "doctor": "node src/cli.js doctor",
-    "telegram": "node src/cli.js telegram"
+    "telegram": "node src/cli.js telegram",
+    "latest": "node src/cli.js latest"
   },
   "keywords": [
     "ai",

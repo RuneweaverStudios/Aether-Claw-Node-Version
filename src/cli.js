@@ -2,7 +2,9 @@
 
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const readline = require('readline');
+const { execSync } = require('child_process');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const chalk = require('chalk');
@@ -722,6 +724,69 @@ async function cmdRalph() {
   }
 }
 
+/**
+ * Update install to latest from origin; preserve .env, swarm_config.json, and brain/ (soul, user, personality, etc.).
+ * Usage: aetherclaw latest  (or node src/cli.js latest)
+ */
+function cmdLatest() {
+  const gitDir = path.join(ROOT, '.git');
+  if (!fs.existsSync(gitDir) || !fs.statSync(gitDir).isDirectory()) {
+    console.error(chalk.red('Not a git repo. Run this from a clone (e.g. install via install.sh).'));
+    process.exit(1);
+  }
+  const envPath = path.join(ROOT, '.env');
+  const configPath = path.join(ROOT, 'swarm_config.json');
+  const brainPath = path.join(ROOT, 'brain');
+  const backupDir = os.tmpdir();
+  const envBackup = path.join(backupDir, 'aetherclaw-update.env');
+  const configBackup = path.join(backupDir, 'aetherclaw-update.swarm_config.json');
+  const brainBackup = path.join(backupDir, 'aetherclaw-update.brain');
+  const restoreBrain = () => {
+    if (!fs.existsSync(brainBackup)) return;
+    if (fs.existsSync(brainPath)) fs.rmSync(brainPath, { recursive: true });
+    fs.mkdirSync(brainPath, { recursive: true });
+    fs.cpSync(brainBackup, brainPath, { recursive: true });
+    fs.rmSync(brainBackup, { recursive: true });
+    console.log(chalk.green('  Restored brain/ (soul.md, user.md, identity.md, memory, etc.)'));
+  };
+  try {
+    if (fs.existsSync(envPath)) {
+      fs.copyFileSync(envPath, envBackup);
+      console.log(chalk.dim('  Backed up .env'));
+    }
+    if (fs.existsSync(configPath)) {
+      fs.copyFileSync(configPath, configBackup);
+      console.log(chalk.dim('  Backed up swarm_config.json'));
+    }
+    if (fs.existsSync(brainPath)) {
+      fs.cpSync(brainPath, brainBackup, { recursive: true });
+      console.log(chalk.dim('  Backed up brain/ (soul, user, personality, memory, skills, etc.)'));
+    }
+    execSync('git fetch origin', { cwd: ROOT, stdio: 'inherit' });
+    const branch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: ROOT, encoding: 'utf8' }).trim();
+    execSync(`git reset --hard origin/${branch}`, { cwd: ROOT, stdio: 'inherit' });
+    if (fs.existsSync(envBackup)) {
+      fs.copyFileSync(envBackup, envPath);
+      fs.unlinkSync(envBackup);
+      console.log(chalk.green('  Restored .env (API key and Telegram unchanged)'));
+    }
+    if (fs.existsSync(configBackup)) {
+      fs.copyFileSync(configBackup, configPath);
+      fs.unlinkSync(configBackup);
+      console.log(chalk.green('  Restored swarm_config.json'));
+    }
+    restoreBrain();
+    execSync('npm install', { cwd: ROOT, stdio: 'inherit' });
+    console.log(chalk.green('\n✓ Aether-Claw updated to latest. Your .env, config, and brain (soul, user, personality) were left unchanged.\n'));
+  } catch (e) {
+    if (fs.existsSync(envBackup)) try { fs.copyFileSync(envBackup, envPath); fs.unlinkSync(envBackup); } catch (_) {}
+    if (fs.existsSync(configBackup)) try { fs.copyFileSync(configBackup, configPath); fs.unlinkSync(configBackup); } catch (_) {}
+    try { restoreBrain(); } catch (_) {}
+    console.error(chalk.red('Update failed: ') + (e.message || e));
+    process.exit(1);
+  }
+}
+
 async function main() {
   const cmd = process.argv[2] || '';
 
@@ -762,6 +827,10 @@ async function main() {
     cmdDoctor();
     return;
   }
+  if (cmd === 'latest') {
+    cmdLatest();
+    return;
+  }
   if (cmd === 'code') {
     await cmdCode();
     return;
@@ -779,6 +848,7 @@ async function main() {
   console.log('  node src/cli.js daemon         - gateway daemon (heartbeat + Telegram)');
   console.log('  node src/cli.js dashboard      - web dashboard (status)');
   console.log('  node src/cli.js doctor         - health check and suggestions');
+  console.log('  node src/cli.js latest        - update to latest from repo (keeps .env and config)');
   console.log('  node src/cli.js code [task]   - plan then build (Cursor-style coding)');
   console.log('  node src/cli.js ralph [N]     - PRD-driven autonomous loop (Ralph-style)');
   console.log('  node src/cli.js status        - status');
