@@ -15,7 +15,6 @@ const { loadConfig } = require('./config');
 const { readIndex } = require('./brain');
 const { searchMemory } = require('./brain');
 const { buildSystemPromptWithSkills } = require('./openclaw-skills');
-const { getKillSwitch } = require('./kill-switch');
 const { routePrompt } = require('./gateway');
 const { runAgentLoop } = require('./agent-loop');
 const { isFirstRun, getBootstrapFirstMessage, getBootstrapContext } = require('./personality');
@@ -32,7 +31,6 @@ function getSystemStatus() {
     const { listEligibleSkills, listAllSkillsWithAuditStatus } = require('./openclaw-skills');
     const allSkills = listAllSkillsWithAuditStatus(ROOT);
     const eligibleSkills = listEligibleSkills(ROOT);
-    const ks = getKillSwitch(ROOT);
     const heartbeatMin = config.heartbeat?.interval_minutes ?? 30;
     const firstRun = isFirstRun(ROOT);
     return {
@@ -42,8 +40,6 @@ function getSystemStatus() {
       skills: allSkills.length,
       valid_skills: eligibleSkills.length,
       safety_gate: (config.safety_gate && config.safety_gate.enabled !== false),
-      kill_switch_armed: ks.isArmed(),
-      kill_switch_triggered: ks.isTriggered(),
       telegram_enabled: !!process.env.TELEGRAM_BOT_TOKEN,
       heartbeat_interval_minutes: heartbeatMin,
       reasoning_model: config.model_routing?.tier_1_reasoning?.model,
@@ -74,7 +70,6 @@ function getConfigForUI() {
 function getSecurityData() {
   try {
     const config = loadConfig(path.join(ROOT, 'swarm_config.json'));
-    const ks = getKillSwitch(ROOT);
     const { getAuditSummary, getFailedSkillIds } = require('./skill-audit');
     const { listAllSkillsWithAuditStatus } = require('./openclaw-skills');
     const auditSummary = getAuditSummary(ROOT);
@@ -85,12 +80,6 @@ function getSecurityData() {
     const warnings = [];
     const notifications = [];
 
-    if (ks.isTriggered()) {
-      warnings.push('Kill switch is triggered — operations disabled.');
-      notifications.push('Kill switch triggered');
-    } else if (ks.isArmed()) {
-      notifications.push('Kill switch armed');
-    }
     if (!safetyGateEnabled) {
       warnings.push('Safety gate is disabled.');
       notifications.push('Safety gate disabled');
@@ -103,8 +92,6 @@ function getSecurityData() {
     return {
       warnings,
       notifications,
-      kill_switch_armed: ks.isArmed(),
-      kill_switch_triggered: ks.isTriggered(),
       safety_gate_enabled: safetyGateEnabled,
       audit_summary: {
         total: auditSummary.total,
@@ -325,8 +312,7 @@ const HTML = `<!DOCTYPE html>
         '<div class="card"><h3>Skills</h3><div class="value">' + d.valid_skills + ' / ' + d.skills + '</div></div>',
         '<div class="card"><h3>Telegram</h3><div class="value">' + (d.telegram_enabled ? 'On' : 'Off') + '</div></div>',
         '<div class="card"><h3>Heartbeat</h3><div class="value">' + (d.heartbeat_interval_minutes || 30) + ' min</div></div>',
-        '<div class="card"><h3>Reasoning model</h3><div class="value">' + (d.reasoning_model || '—') + '</div></div>',
-        '<div class="card"><h3>Kill switch</h3><div class="value">' + (d.kill_switch_triggered ? 'Triggered' : d.kill_switch_armed ? 'Armed' : 'Off') + '</div></div>'
+        '<div class="card"><h3>Reasoning model</h3><div class="value">' + (d.reasoning_model || '—') + '</div></div>'
       ].join('');
       raw.textContent = JSON.stringify(d, null, 2);
     }
@@ -358,7 +344,6 @@ const HTML = `<!DOCTYPE html>
         warnEl.innerHTML = (warnEl.innerHTML || '') + '<div class="card"><h3>Notifications</h3><ul>' + d.notifications.map(function(n) { return '<li>' + escapeHtml(n) + '</li>'; }).join('') + '</ul></div>';
       }
       gridEl.innerHTML = [
-        '<div class="card"><h3>Kill switch</h3><div class="value">' + (d.kill_switch_triggered ? 'Triggered' : d.kill_switch_armed ? 'Armed' : 'Off') + '</div></div>',
         '<div class="card"><h3>Safety gate</h3><div class="value">' + (d.safety_gate_enabled ? 'On' : 'Off') + '</div></div>',
         '<div class="card"><h3>Audit passed</h3><div class="value">' + (d.audit_summary ? d.audit_summary.passed : 0) + '</div></div>',
         '<div class="card"><h3>Audit failed</h3><div class="value">' + (d.audit_summary ? d.audit_summary.failed : 0) + '</div></div>'

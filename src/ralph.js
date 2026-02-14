@@ -8,7 +8,6 @@ const fs = require('fs');
 const { loadConfig } = require('./config');
 const { runAgentLoop } = require('./agent-loop');
 const { runTool } = require('./tools');
-const { getKillSwitch } = require('./kill-switch');
 
 const ROOT_DEFAULT = path.resolve(__dirname, '..');
 const COMPLETE_MARKER = '<promise>COMPLETE</promise>';
@@ -125,12 +124,7 @@ async function runRalph(workspaceRoot, options = {}) {
     return { completed: true, iterations: 0, message: 'All stories already complete.' };
   }
 
-  const killSwitch = getKillSwitch(root);
   for (let i = 1; i <= maxIterations; i++) {
-    if (killSwitch.isTriggered()) {
-      return { completed: false, iterations: i - 1, error: 'Kill switch triggered.' };
-    }
-
     const userMessage = `Ralph iteration ${i} of ${maxIterations}. Execute the Ralph workflow: use ralph_get_next_story to get the next story (or confirm all complete). Implement that one story, run quality checks, commit, then ralph_mark_story_passed and ralph_append_progress. If all stories are complete, reply with ${COMPLETE_MARKER}.`;
 
     if (options.onIteration) options.onIteration(i, maxIterations);

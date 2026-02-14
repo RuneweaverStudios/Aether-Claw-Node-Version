@@ -8,7 +8,6 @@ const fs = require('fs');
 const { execSync, spawn } = require('child_process');
 const axios = require('axios');
 const { searchMemory, readIndex, getBrainDir, indexAll } = require('../brain');
-const { getKillSwitch } = require('../kill-switch');
 const { checkPermission, ActionCategory } = require('../safety-gate');
 const { loadConfig } = require('../config');
 const { sendTelegramMessage } = require('../telegram-setup');
@@ -413,7 +412,6 @@ const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'datetime', description: 'Get current date, time, and timezone.', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'list_dir', description: 'List directory contents (names and whether file or dir). Path relative to project root.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Directory path relative to project root (default .)' } }, required: [] } } },
   { type: 'function', function: { name: 'file_exists', description: 'Check if path exists and type (file, dir, or none).', parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } } },
-  { type: 'function', function: { name: 'kill_switch_status', description: 'Read-only kill switch status: armed, triggered.', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'memory_append', description: 'Append text to a brain file (e.g. memory.md) so the agent can remember.', parameters: { type: 'object', properties: { file: { type: 'string', description: 'Brain file name (default memory.md)' }, content: { type: 'string' } }, required: ['content'] } } },
   { type: 'function', function: { name: 'memory_index', description: 'Reindex brain so new content is searchable.', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'audit_tail', description: 'Read last N entries from the audit log.', parameters: { type: 'object', properties: { limit: { type: 'number', description: 'Max entries (default 20)' } } } } },
@@ -475,8 +473,6 @@ function runCreateDirectory(workspaceRoot, args, context) {
 }
 
 function runExec(workspaceRoot, args, context) {
-  const { killSwitch, config } = context || {};
-  if (killSwitch && killSwitch.isTriggered()) return { error: 'Kill switch is triggered; exec disabled.' };
   const perm = checkPermission(ActionCategory.SYSTEM_COMMAND, null, workspaceRoot);
   if (!perm.allowed) return { error: 'Permission denied: ' + (perm.confirmation_message || 'system_command') };
 
@@ -593,8 +589,6 @@ function runProcess(workspaceRoot, args) {
 }
 
 function runReadFile(workspaceRoot, args, context) {
-  const { killSwitch } = context || {};
-  if (killSwitch && killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
   const perm = checkPermission(ActionCategory.FILE_READ, null, workspaceRoot);
   if (!perm.allowed) return { error: 'Permission denied: file_read' };
   try {
@@ -607,8 +601,6 @@ function runReadFile(workspaceRoot, args, context) {
 }
 
 function runWriteFile(workspaceRoot, args, context) {
-  const { killSwitch } = context || {};
-  if (killSwitch && killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
   const perm = checkPermission(ActionCategory.FILE_WRITE, null, workspaceRoot);
   if (!perm.allowed) return { error: 'Permission denied: file_write' };
   try {
@@ -622,8 +614,6 @@ function runWriteFile(workspaceRoot, args, context) {
 }
 
 function runDeleteFile(workspaceRoot, args, context) {
-  const { killSwitch } = context || {};
-  if (killSwitch && killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
   const perm = checkPermission(ActionCategory.FILE_WRITE, null, workspaceRoot);
   if (!perm.allowed) return { error: 'Permission denied: file_write' };
   const root = workspaceRoot || ROOT_DEFAULT;
@@ -651,8 +641,6 @@ function runMemorySearch(workspaceRoot, args) {
 }
 
 function runEdit(workspaceRoot, args, context) {
-  const { killSwitch } = context || {};
-  if (killSwitch && killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
   const perm = checkPermission(ActionCategory.FILE_WRITE, null, workspaceRoot);
   if (!perm.allowed) return { error: 'Permission denied: file_write' };
   try {
@@ -668,8 +656,6 @@ function runEdit(workspaceRoot, args, context) {
 }
 
 function runApplyPatch(workspaceRoot, args, context) {
-  const { killSwitch } = context || {};
-  if (killSwitch && killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
   const perm = checkPermission(ActionCategory.FILE_WRITE, null, workspaceRoot);
   if (!perm.allowed) return { error: 'Permission denied: file_write' };
   const workdir = args.workdir ? resolvePath(workspaceRoot, args.workdir) : workspaceRoot;
@@ -918,7 +904,6 @@ function runDoctor(workspaceRoot) {
 }
 
 function runNotify(workspaceRoot, args, context) {
-  if (context.killSwitch && context.killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
   const perm = checkPermission(ActionCategory.NOTIFICATION, null, workspaceRoot);
   if (!perm.allowed) return { error: 'Permission denied: notification' };
   try {
@@ -961,14 +946,7 @@ function runFileExists(workspaceRoot, args) {
   }
 }
 
-function runKillSwitchStatus(workspaceRoot) {
-  const ks = getKillSwitch(workspaceRoot || ROOT_DEFAULT);
-  return { armed: ks.isArmed(), triggered: ks.isTriggered() };
-}
-
 function runMemoryAppend(workspaceRoot, args, context) {
-  const { killSwitch } = context || {};
-  if (killSwitch && killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
   const perm = checkPermission(ActionCategory.MEMORY_MODIFICATION, null, workspaceRoot);
   if (!perm.allowed) return { error: 'Permission denied: memory_modification' };
   const root = workspaceRoot || ROOT_DEFAULT;
@@ -987,8 +965,6 @@ function runMemoryAppend(workspaceRoot, args, context) {
 }
 
 function runMemoryIndex(workspaceRoot, context) {
-  const { killSwitch } = context || {};
-  if (killSwitch && killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
   const perm = checkPermission(ActionCategory.FILE_READ, null, workspaceRoot);
   if (!perm.allowed) return { error: 'Permission denied: file_read' };
   try {
@@ -1000,7 +976,6 @@ function runMemoryIndex(workspaceRoot, context) {
 }
 
 function runAuditTail(workspaceRoot, args, context) {
-  if (context.killSwitch && context.killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
   const perm = checkPermission(ActionCategory.AUDIT_READ, null, workspaceRoot);
   if (!perm.allowed) return { error: 'Permission denied: audit_read' };
   const root = workspaceRoot || ROOT_DEFAULT;
@@ -1051,8 +1026,6 @@ function runGitLog(workspaceRoot, args) {
 }
 
 function runGitCommit(workspaceRoot, args, context) {
-  const { killSwitch } = context || {};
-  if (killSwitch && killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
   const perm = checkPermission(ActionCategory.GIT_OPERATIONS, null, workspaceRoot);
   if (!perm.allowed) return { error: 'Permission denied: git_operations' };
   const root = workspaceRoot || ROOT_DEFAULT;
@@ -1085,7 +1058,6 @@ async function runHttpRequest(args) {
 }
 
 function runJsonRead(workspaceRoot, args, context) {
-  if (context.killSwitch && context.killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
   const perm = checkPermission(ActionCategory.FILE_READ, null, workspaceRoot);
   if (!perm.allowed) return { error: 'Permission denied: file_read' };
   try {
@@ -1102,8 +1074,6 @@ function runJsonRead(workspaceRoot, args, context) {
 }
 
 function runJsonWrite(workspaceRoot, args, context) {
-  const { killSwitch } = context || {};
-  if (killSwitch && killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
   const perm = checkPermission(ActionCategory.FILE_WRITE, null, workspaceRoot);
   if (!perm.allowed) return { error: 'Permission denied: file_write' };
   try {
@@ -1229,7 +1199,6 @@ function runRalphGetNextStory(workspaceRoot, args) {
 
 function runRalphMarkStoryPassed(workspaceRoot, args, context) {
   const root = workspaceRoot || ROOT_DEFAULT;
-  if (context.killSwitch && context.killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
   const perm = checkPermission(ActionCategory.FILE_WRITE, null, root);
   if (!perm.allowed) return { error: 'Permission denied: file_write' };
   const storyId = args.story_id;
@@ -1252,7 +1221,6 @@ function runRalphMarkStoryPassed(workspaceRoot, args, context) {
 
 function runRalphAppendProgress(workspaceRoot, args, context) {
   const root = workspaceRoot || ROOT_DEFAULT;
-  if (context.killSwitch && context.killSwitch.isTriggered()) return { error: 'Kill switch triggered' };
   const perm = checkPermission(ActionCategory.FILE_WRITE, null, root);
   if (!perm.allowed) return { error: 'Permission denied: file_write' };
   const content = args.content;
@@ -1273,13 +1241,12 @@ function runRalphAppendProgress(workspaceRoot, args, context) {
  * @param {string} workspaceRoot - Project root path
  * @param {string} toolName - Tool name (exec, process, read_file, write_file, memory_search, edit, apply_patch, memory_get, web_search, web_fetch, browser, canvas, nodes, message, cron, gateway, sessions_*, agents_list, image)
  * @param {Object} args - Tool arguments (from LLM)
- * @param {Object} context - { killSwitch, config }
+ * @param {Object} context - { config }
  * @returns {Promise<Object>} Result to send back to the model (will be JSON.stringify'd)
  */
 async function runTool(workspaceRoot, toolName, args, context = {}) {
   const root = workspaceRoot || ROOT_DEFAULT;
-  const killSwitch = context.killSwitch || getKillSwitch(root);
-  const ctx = { ...context, killSwitch };
+  const ctx = context;
 
   switch (toolName) {
     case 'exec':
@@ -1343,8 +1310,6 @@ async function runTool(workspaceRoot, toolName, args, context = {}) {
       return runListDir(root, args);
     case 'file_exists':
       return runFileExists(root, args);
-    case 'kill_switch_status':
-      return runKillSwitchStatus(root);
     case 'memory_append':
       return runMemoryAppend(root, args, ctx);
     case 'memory_index':

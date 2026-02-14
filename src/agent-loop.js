@@ -7,7 +7,6 @@ const axios = require('axios');
 const path = require('path');
 const { loadConfig } = require('./config');
 const { resolveModelAndMaxTokens, stripToolCallLeakage } = require('./api');
-const { getKillSwitch } = require('./kill-switch');
 const { TOOL_DEFINITIONS, runTool } = require('./tools');
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
@@ -68,10 +67,6 @@ async function chatWithTools(messages, config, options = {}) {
 async function runAgentLoop(workspaceRoot, userMessage, systemPrompt, config, options = {}) {
   const root = workspaceRoot || ROOT_DEFAULT;
   const maxIter = options.maxIterations ?? MAX_ITERATIONS;
-  const killSwitch = getKillSwitch(root);
-  if (killSwitch.isTriggered()) {
-    return { reply: '', error: 'Kill switch is triggered. Operations disabled.' };
-  }
 
   const messages = [];
   if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
@@ -84,10 +79,6 @@ async function runAgentLoop(workspaceRoot, userMessage, systemPrompt, config, op
     iterations++;
     const tier = options.tier || 'action';
     const msg = await chatWithTools(messages, config, { tier, max_tokens: options.max_tokens });
-
-    if (killSwitch.isTriggered()) {
-      return { reply: '', error: 'Kill switch triggered during run.' };
-    }
 
     const toolCalls = msg.tool_calls;
     if (!toolCalls || toolCalls.length === 0) {
@@ -112,7 +103,7 @@ async function runAgentLoop(workspaceRoot, userMessage, systemPrompt, config, op
       } catch (e) {
         args = {};
       }
-      const result = await runTool(root, name, args, { killSwitch, config });
+      const result = await runTool(root, name, args, { config });
       const content = typeof result === 'string' ? result : JSON.stringify(result);
       messages.push({
         role: 'tool',
