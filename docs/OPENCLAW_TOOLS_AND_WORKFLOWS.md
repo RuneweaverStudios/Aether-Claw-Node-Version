@@ -1,6 +1,6 @@
 # OpenClaw Tools and Workflows Reference
 
-Canonical list of **built-in tools** and **tool groups** in OpenClaw (from [docs.openclaw.ai/tools](https://docs.openclaw.ai/tools)), plus recommended workflows. Aether-Claw implements the full tool set (24 tools; browser, canvas, nodes, sessions_send, sessions_spawn are stubs) and the same agent-loop pattern.
+Canonical list of **built-in tools** and **tool groups** in OpenClaw (from [docs.openclaw.ai/tools](https://docs.openclaw.ai/tools)), plus recommended workflows. Aether-Claw implements the full tool set (24 tools; canvas is implemented via optional Playwright; browser, nodes, sessions_send, sessions_spawn are stubs) and the same agent-loop pattern.
 
 ---
 
@@ -80,7 +80,7 @@ Canonical list of **built-in tools** and **tool groups** in OpenClaw (from [docs
 | Tool | Description |
 |------|-------------|
 | **browser** | OpenClaw-managed browser. Actions: `status`, `start`, `stop`, `tabs`, `open`, `focus`, `close`, `snapshot`, `screenshot`, `act`, `navigate`, `console`, `pdf`, `upload`, `dialog`. Profile management: `profiles`, `create-profile`, `delete-profile`, `reset-profile`. |
-| **canvas** | Node Canvas. Actions: `present`, `hide`, `navigate`, `eval`, `snapshot`, `a2ui_push`, `a2ui_reset`. |
+| **canvas** | Local browser canvas (Playwright). Actions: `present`, `hide`, `navigate`, `eval`, `snapshot`, `a2ui_push`, `a2ui_reset`. Optional dep: `playwright`. |
 
 ### Nodes
 
@@ -140,7 +140,7 @@ Canonical list of **built-in tools** and **tool groups** in OpenClaw (from [docs
 | **group:fs** (read, write, edit, apply_patch) | ✅ `read_file`, `write_file`, `edit` (old_string→new_string), `apply_patch` (unified diff via `patch` command). |
 | **group:memory** | ✅ `memory_search` (brain index), `memory_get` (by brain file key). |
 | **group:web** | ✅ `web_search` (Brave API; BRAVE_API_KEY), `web_fetch` (URL → text). |
-| **group:ui** (browser, canvas) | 🔲 Stubs: `browser`, `canvas`, `nodes` return "not implemented". |
+| **group:ui** (browser, canvas) | 🔲 `browser`, `nodes` stubs. ✅ **canvas** implemented (Playwright; optional dep). |
 | **group:messaging** | ✅ `message` (action send → Telegram when TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID set). |
 | **group:automation** | ✅ `cron` (list/add/remove/run in swarm_config.json cron.jobs), `gateway` (config.get, config.patch; restart stub). |
 | **group:sessions** | ✅ `sessions_list`, `sessions_history`, `session_status` (minimal in-memory store); 🔲 `sessions_send`, `sessions_spawn` stubs. |

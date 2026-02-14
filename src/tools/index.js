@@ -241,12 +241,21 @@ const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'canvas',
-      description: 'Node Canvas (present, snapshot, a2ui). In Aether-Claw this is a stub; requires OpenClaw node connection.',
+      description: 'Local browser canvas: show HTML/URL, take snapshots, run JS. Actions: present (show url or html), hide (close), navigate (goto url), eval (run JS in page), snapshot (screenshot to path or base64), a2ui_push (set page HTML), a2ui_reset (blank page). Requires optional dependency: npm install playwright.',
       parameters: {
         type: 'object',
         properties: {
-          action: { type: 'string', description: 'present|hide|snapshot' }
-        }
+          action: {
+            type: 'string',
+            enum: ['present', 'hide', 'navigate', 'eval', 'snapshot', 'a2ui_push', 'a2ui_reset'],
+            description: 'Action: present (show), hide (close), navigate (goto url), eval (run script), snapshot (screenshot), a2ui_push (set HTML), a2ui_reset (blank)'
+          },
+          url: { type: 'string', description: 'For present or navigate: URL to open' },
+          html: { type: 'string', description: 'For present or a2ui_push: HTML content to display' },
+          script: { type: 'string', description: 'For eval: JavaScript to run in page context' },
+          path: { type: 'string', description: 'For snapshot: optional file path to save PNG (relative to workspace)' }
+        },
+        required: ['action']
       }
     }
   },
@@ -729,8 +738,89 @@ function runBrowserStub() {
   return { error: 'Browser tool requires Playwright/OpenClaw browser; not implemented in Aether-Claw. Use exec to run headless browsers if needed.' };
 }
 
-function runCanvasStub() {
-  return { error: 'Canvas tool requires OpenClaw node connection; not implemented in Aether-Claw.' };
+// Canvas: single browser + page per process (lazy-launched via Playwright)
+let canvasBrowser = null;
+let canvasPage = null;
+
+async function ensureCanvas(workspaceRoot) {
+  if (canvasPage) return null;
+  let playwright;
+  try {
+    playwright = require('playwright');
+  } catch (e) {
+    return { error: 'Canvas requires Playwright. Install with: npm install playwright (or npm run install:global from repo).' };
+  }
+  try {
+    canvasBrowser = await playwright.chromium.launch({
+      headless: process.env.CI === 'true' || process.env.AETHERCLAW_CANVAS_HEADLESS === '1'
+    });
+    canvasPage = await canvasBrowser.newPage();
+    return null;
+  } catch (e) {
+    return { error: 'Canvas launch failed: ' + (e.message || String(e)) };
+  }
+}
+
+async function runCanvas(workspaceRoot, args) {
+  const root = workspaceRoot || ROOT_DEFAULT;
+  const action = args.action;
+  if (action === 'hide') {
+    if (canvasBrowser) {
+      try {
+        await canvasBrowser.close();
+      } catch (_) {}
+      canvasBrowser = null;
+      canvasPage = null;
+    }
+    return { ok: true, message: 'Canvas closed.' };
+  }
+  if (action === 'present' || action === 'navigate' || action === 'eval' || action === 'snapshot' || action === 'a2ui_push' || action === 'a2ui_reset') {
+    const err = await ensureCanvas(root);
+    if (err) return err;
+  }
+  try {
+    if (action === 'present') {
+      if (args.html) {
+        await canvasPage.setContent(args.html, { waitUntil: 'domcontentloaded' });
+      } else if (args.url) {
+        await canvasPage.goto(args.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      } else {
+        await canvasPage.goto('about:blank');
+      }
+      return { ok: true, message: 'Canvas presented.' };
+    }
+    if (action === 'navigate') {
+      if (!args.url) return { error: 'navigate requires url' };
+      await canvasPage.goto(args.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      return { ok: true, message: 'Navigated.' };
+    }
+    if (action === 'eval') {
+      if (!args.script) return { error: 'eval requires script' };
+      const result = await canvasPage.evaluate(args.script);
+      return { ok: true, result };
+    }
+    if (action === 'snapshot') {
+      const buf = await canvasPage.screenshot({ type: 'png' });
+      if (args.path) {
+        const outPath = path.isAbsolute(args.path) ? args.path : path.join(root, args.path);
+        fs.mkdirSync(path.dirname(outPath), { recursive: true });
+        fs.writeFileSync(outPath, buf);
+        return { ok: true, path: outPath };
+      }
+      return { ok: true, image_base64: buf.toString('base64') };
+    }
+    if (action === 'a2ui_push') {
+      await canvasPage.setContent(args.html != null ? args.html : '<body></body>', { waitUntil: 'domcontentloaded' });
+      return { ok: true, message: 'UI pushed.' };
+    }
+    if (action === 'a2ui_reset') {
+      await canvasPage.goto('about:blank');
+      return { ok: true, message: 'Canvas reset.' };
+    }
+  } catch (e) {
+    return { error: 'Canvas action failed: ' + (e.message || String(e)) };
+  }
+  return { error: 'Unknown canvas action: ' + action };
 }
 
 function runNodesStub() {
@@ -1483,7 +1573,7 @@ async function runTool(workspaceRoot, toolName, args, context = {}) {
     case 'browser':
       return runBrowserStub();
     case 'canvas':
-      return runCanvasStub();
+      return await runCanvas(root, args);
     case 'nodes':
       return runNodesStub();
     case 'message':

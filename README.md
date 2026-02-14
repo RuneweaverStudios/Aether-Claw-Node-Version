@@ -11,9 +11,11 @@ curl -sSL https://raw.githubusercontent.com/RuneweaverStudios/Aether-Claw-Node-V
 Then:
 
 ```bash
-cd ~/.aether-claw-node && node src/cli.js onboard
-node src/cli.js tui
+cd ~/.aether-claw-node && aetherclaw onboard
+aetherclaw tui
 ```
+
+(If you didn't install globally, use `node src/cli.js onboard` and `node src/cli.js tui` instead.)
 
 ## Manual setup
 
@@ -21,24 +23,29 @@ node src/cli.js tui
 git clone https://github.com/RuneweaverStudios/Aether-Claw-Node-Version.git
 cd Aether-Claw-Node-Version
 npm install
-node src/cli.js onboard
+npm run install:global   # optional: install globally so 'aetherclaw' is on PATH
+aetherclaw onboard       # or: node src/cli.js onboard
 ```
+
+**Global install (recommended):** From the repo run `npm run install:global` (or `npm install -g .`) so the `aetherclaw` command is available everywhere. The package sets `preferGlobal: true` so npm will suggest global install when you install locally.
 
 ## Commands
 
+Use the `aetherclaw` command if you installed globally; otherwise use `node src/cli.js <cmd>` from the repo.
+
 | Command | Description |
 |--------|-------------|
-| `node src/cli.js onboard` | First-time setup (API key, brain, optional Telegram) |
-| `node src/cli.js tui` | Chat TUI (gateway routing, tools for coding tasks) |
-| `node src/cli.js dashboard` | Web UI (Chat, Status, Security, Config) at http://localhost:8501 |
-| `node src/cli.js status` | Show status (index, skills, config) |
-| `node src/cli.js doctor` | Health check and suggestions |
-| `node src/cli.js daemon` | Run gateway daemon (heartbeat + Telegram) in foreground |
-| `node src/cli.js telegram` | Run Telegram bot only (manual) |
-| `node src/cli.js telegram-setup` | (Re)pair Telegram (token + pairing code) |
-| `node src/cli.js index [file]` | Reindex brain for memory search |
+| `aetherclaw onboard` | First-time setup (API key, brain, optional Telegram) |
+| `aetherclaw tui` | Chat TUI (gateway routing, tools for coding tasks) |
+| `aetherclaw dashboard` | Web UI (Chat, Status, Security, Config) at http://localhost:8501 |
+| `aetherclaw status` | Show status (index, skills, config) |
+| `aetherclaw doctor` | Health check and suggestions |
+| `aetherclaw daemon` | Run gateway daemon (heartbeat + Telegram) in foreground |
+| `aetherclaw telegram` | Run Telegram bot only (manual) |
+| `aetherclaw telegram-setup` | (Re)pair Telegram (token + pairing code) |
+| `aetherclaw index [file]` | Reindex brain for memory search |
 
-Or use npm scripts: `npm run onboard`, `npm run tui`, `npm run dashboard`, `npm run status`, `npm run doctor`, `npm run daemon`, `npm run telegram`.
+Or use npm scripts from the repo: `npm run onboard`, `npm run tui`, `npm run dashboard`, `npm run status`, `npm run doctor`, `npm run daemon`, `npm run telegram`.
 
 ## Environment
 
@@ -66,7 +73,7 @@ BRAVE_API_KEY=optional (for web_search tool)
 - `src/gateway.js` – Intent routing (chat / action / memory / reflect)
 - `src/api.js` – OpenRouter API (with optional fallback models)
 - `src/agent-loop.js` – Tool-calling loop for action (coding) tasks
-- `src/tools/index.js` – All tools (exec, process, read_file, write_file, edit, apply_patch, memory_*, web_*, message, cron, gateway, sessions_*, agents_list, image; browser/canvas/nodes stubs)
+- `src/tools/index.js` – All tools (exec, process, read_file, write_file, edit, apply_patch, memory_*, web_*, message, cron, gateway, sessions_*, agents_list, image, **canvas** [Playwright optional]; browser/nodes stubs)
 - `src/dashboard.js` – HTTP server: Chat API, Status, Security, Config, Web UI (markdown + code blocks)
 - `src/config.js` – Config loader (swarm_config.json + defaults)
 - `src/brain.js` – Memory index (brain_index.json)

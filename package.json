@@ -16,7 +16,8 @@
     "dashboard": "node src/cli.js dashboard",
     "doctor": "node src/cli.js doctor",
     "telegram": "node src/cli.js telegram",
-    "latest": "node src/cli.js latest"
+    "latest": "node src/cli.js latest",
+    "install:global": "npm install -g ."
   },
   "keywords": [
     "ai",
@@ -36,6 +37,8 @@
     "dotenv": "^16.3.1"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-code": "^2.1.0"
-  }
+    "@anthropic-ai/claude-code": "^2.1.0",
+    "playwright": "^1.49.0"
+  },
+  "preferGlobal": true
 }
