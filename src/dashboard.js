@@ -14,11 +14,12 @@ const ROOT = path.resolve(__dirname, '..');
 const { loadConfig } = require('./config');
 const { readIndex } = require('./brain');
 const { searchMemory } = require('./brain');
-const { listSkills } = require('./safe-skill-creator');
+const { buildSystemPromptWithSkills } = require('./openclaw-skills');
 const { getKillSwitch } = require('./kill-switch');
 const { routePrompt } = require('./gateway');
 const { callLLM } = require('./api');
 const { runAgentLoop } = require('./agent-loop');
+const { isFirstRun, getBootstrapFirstMessage, getBootstrapContext } = require('./personality');
 
 const CHAT_SYSTEM = 'You are Aether-Claw, a secure AI assistant with memory and skills. Be helpful and concise.';
 const ACTION_SYSTEM = 'You are an expert programmer with access to tools: exec (run shell commands in the project), process (manage background exec sessions), read_file, write_file, memory_search. Use these tools to run commands, read and write files, and search memory. Prefer running code and editing files via tools rather than only showing code in chat.';
@@ -29,23 +30,27 @@ function getSystemStatus() {
     const config = loadConfig(path.join(ROOT, 'swarm_config.json'));
     const index = readIndex(ROOT);
     const fileCount = Object.keys(index.files || {}).length;
-    const skills = listSkills(path.join(ROOT, 'skills'));
-    const validSkills = skills.filter(s => s.signature_valid).length;
+    const { listEligibleSkills, listAllSkillsWithAuditStatus } = require('./openclaw-skills');
+    const allSkills = listAllSkillsWithAuditStatus(ROOT);
+    const eligibleSkills = listEligibleSkills(ROOT);
     const ks = getKillSwitch(ROOT);
     const heartbeatMin = config.heartbeat?.interval_minutes ?? 30;
+    const firstRun = isFirstRun(ROOT);
     return {
       version: config.version || '1.0.0',
       indexed_files: fileCount,
       total_versions: Object.values(index.files || {}).reduce((s, f) => s + (f.versions?.length || 0), 0),
-      skills: skills.length,
-      valid_skills: validSkills,
+      skills: allSkills.length,
+      valid_skills: eligibleSkills.length,
       safety_gate: (config.safety_gate && config.safety_gate.enabled !== false),
       kill_switch_armed: ks.isArmed(),
       kill_switch_triggered: ks.isTriggered(),
       telegram_enabled: !!process.env.TELEGRAM_BOT_TOKEN,
       heartbeat_interval_minutes: heartbeatMin,
       reasoning_model: config.model_routing?.tier_1_reasoning?.model,
-      action_model: config.model_routing?.tier_2_action?.model
+      action_model: config.model_routing?.tier_2_action?.model,
+      first_run: firstRun,
+      bootstrap_first_message: firstRun ? getBootstrapFirstMessage() : undefined
     };
   } catch (e) {
     return { error: String(e.message || e) };
@@ -64,6 +69,53 @@ function getConfigForUI() {
     };
   } catch (e) {
     return { error: String(e.message || e) };
+  }
+}
+
+function getSecurityData() {
+  try {
+    const config = loadConfig(path.join(ROOT, 'swarm_config.json'));
+    const ks = getKillSwitch(ROOT);
+    const { getAuditSummary, getFailedSkillIds } = require('./skill-audit');
+    const { listAllSkillsWithAuditStatus } = require('./openclaw-skills');
+    const auditSummary = getAuditSummary(ROOT);
+    const failedIds = getFailedSkillIds(ROOT);
+    const allSkills = listAllSkillsWithAuditStatus(ROOT);
+    const safetyGateEnabled = config.safety_gate && config.safety_gate.enabled !== false;
+
+    const warnings = [];
+    const notifications = [];
+
+    if (ks.isTriggered()) {
+      warnings.push('Kill switch is triggered — operations disabled.');
+      notifications.push('Kill switch triggered');
+    } else if (ks.isArmed()) {
+      notifications.push('Kill switch armed');
+    }
+    if (!safetyGateEnabled) {
+      warnings.push('Safety gate is disabled.');
+      notifications.push('Safety gate disabled');
+    }
+    if (failedIds.length > 0) {
+      warnings.push(failedIds.length + ' skill(s) failed security audit: ' + failedIds.join(', '));
+      notifications.push(failedIds.length + ' skills failed audit');
+    }
+
+    return {
+      warnings,
+      notifications,
+      kill_switch_armed: ks.isArmed(),
+      kill_switch_triggered: ks.isTriggered(),
+      safety_gate_enabled: safetyGateEnabled,
+      audit_summary: {
+        total: auditSummary.total,
+        passed: auditSummary.passed,
+        failed: auditSummary.failed
+      },
+      skills_audit: allSkills.map(s => ({ id: s.id, name: s.name, audit: s.audit, report: s.report || '' }))
+    };
+  } catch (e) {
+    return { error: String(e.message || e), warnings: [], notifications: [] };
   }
 }
 
@@ -92,10 +144,12 @@ async function handleChatMessage(message) {
     systemPrompt = CHAT_SYSTEM + '\n\n' + memoryContext;
     tier = 'reasoning';
   }
+  if (isFirstRun(ROOT)) systemPrompt += getBootstrapContext(ROOT);
+  systemPrompt = buildSystemPromptWithSkills(systemPrompt, ROOT);
 
   try {
     if (action === 'action') {
-      const result = await runAgentLoop(ROOT, query, ACTION_SYSTEM, config, { tier: 'action', max_tokens: 4096 });
+      const result = await runAgentLoop(ROOT, query, systemPrompt, config, { tier: 'action', max_tokens: 4096 });
       if (result.error && !result.reply) return { error: result.error };
       return { reply: result.reply || '', action, toolCallsCount: result.toolCallsCount };
     }
@@ -171,6 +225,7 @@ const HTML = `<!DOCTYPE html>
     <div class="tabs">
       <button type="button" data-tab="chat" class="active">Chat</button>
       <button type="button" data-tab="status">Status</button>
+      <button type="button" data-tab="security">Security</button>
       <button type="button" data-tab="config">Config</button>
     </div>
     <div id="chatPanel" class="panel active">
@@ -183,6 +238,12 @@ const HTML = `<!DOCTYPE html>
     <div id="statusPanel" class="panel">
       <div class="status-grid" id="statusGrid"></div>
       <pre class="raw" id="statusRaw"></pre>
+    </div>
+    <div id="securityPanel" class="panel">
+      <div id="securityWarnings"></div>
+      <div class="status-grid" id="securityGrid"></div>
+      <div id="securitySkills"></div>
+      <pre class="raw" id="securityRaw"></pre>
     </div>
     <div id="configPanel" class="panel">
       <pre class="raw" id="configRaw"></pre>
@@ -206,7 +267,9 @@ const HTML = `<!DOCTYPE html>
         tabs.forEach((x) => x.classList.toggle('active', x === t));
         panels.forEach((p) => p.classList.toggle('active', p.id === name + 'Panel'));
         if (name === 'status') loadStatus();
+        if (name === 'security') loadSecurity();
         if (name === 'config') loadConfig();
+        if (name !== 'security' && securityPollTimer) { clearInterval(securityPollTimer); securityPollTimer = null; }
       });
     });
     const messagesEl = document.getElementById('messages');
@@ -228,6 +291,13 @@ const HTML = `<!DOCTYPE html>
       renderHistory();
     }
     renderHistory();
+    fetch('/status').then(function(r) { return r.json(); }).then(function(d) {
+      if (d.first_run && history.length === 0 && d.bootstrap_first_message) {
+        history = [{ role: 'user', content: 'Wake up!' }, { role: 'assistant', content: d.bootstrap_first_message }];
+        sessionStorage.setItem('aetherHistory', JSON.stringify(history));
+        renderHistory();
+      }
+    });
     chatForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const text = inputEl.value.trim();
@@ -273,6 +343,45 @@ const HTML = `<!DOCTYPE html>
       const d = await res.json();
       document.getElementById('configRaw').textContent = JSON.stringify(d, null, 2);
     }
+    let securityPollTimer = null;
+    async function loadSecurity() {
+      const res = await fetch('/api/security');
+      const d = await res.json();
+      const warnEl = document.getElementById('securityWarnings');
+      const gridEl = document.getElementById('securityGrid');
+      const skillsEl = document.getElementById('securitySkills');
+      const rawEl = document.getElementById('securityRaw');
+      if (d.error) {
+        warnEl.innerHTML = '<p class="error">' + escapeHtml(d.error) + '</p>';
+        gridEl.innerHTML = '';
+        skillsEl.innerHTML = '';
+        rawEl.textContent = d.error;
+        return;
+      }
+      warnEl.innerHTML = '';
+      if (d.warnings && d.warnings.length > 0) {
+        warnEl.innerHTML = '<div class="card" style="border-color:#f87171;"><h3>Warnings</h3>' + d.warnings.map(function(w) { return '<p class="error">' + escapeHtml(w) + '</p>'; }).join('') + '</div>';
+      }
+      if (d.notifications && d.notifications.length > 0) {
+        warnEl.innerHTML = (warnEl.innerHTML || '') + '<div class="card"><h3>Notifications</h3><ul>' + d.notifications.map(function(n) { return '<li>' + escapeHtml(n) + '</li>'; }).join('') + '</ul></div>';
+      }
+      gridEl.innerHTML = [
+        '<div class="card"><h3>Kill switch</h3><div class="value">' + (d.kill_switch_triggered ? 'Triggered' : d.kill_switch_armed ? 'Armed' : 'Off') + '</div></div>',
+        '<div class="card"><h3>Safety gate</h3><div class="value">' + (d.safety_gate_enabled ? 'On' : 'Off') + '</div></div>',
+        '<div class="card"><h3>Audit passed</h3><div class="value">' + (d.audit_summary ? d.audit_summary.passed : 0) + '</div></div>',
+        '<div class="card"><h3>Audit failed</h3><div class="value">' + (d.audit_summary ? d.audit_summary.failed : 0) + '</div></div>'
+      ].join('');
+      if (d.skills_audit && d.skills_audit.length > 0) {
+        skillsEl.innerHTML = '<h3 style="margin-top:1rem;">Skills audit</h3><table style="width:100%;border-collapse:collapse;"><thead><tr><th style="text-align:left;">Skill</th><th style="text-align:left;">Status</th><th style="text-align:left;">Report</th></tr></thead><tbody>' + d.skills_audit.map(function(s) {
+          return '<tr><td>' + escapeHtml(s.name) + '</td><td>' + (s.audit === 'passed' ? 'Passed' : '<span class="error">Failed</span>') + '</td><td style="font-size:0.85rem;">' + escapeHtml(s.report ? s.report.slice(0, 80) : '') + '</td></tr>';
+        }).join('') + '</tbody></table>';
+      } else {
+        skillsEl.innerHTML = '';
+      }
+      rawEl.textContent = JSON.stringify(d, null, 2);
+      if (securityPollTimer) clearInterval(securityPollTimer);
+      securityPollTimer = setInterval(loadSecurity, 30000);
+    }
   </script>
 </body>
 </html>
@@ -296,6 +405,11 @@ const server = http.createServer(async (req, res) => {
   if (url === '/api/config') {
     setJson();
     res.end(JSON.stringify(getConfigForUI()));
+    return;
+  }
+  if (url === '/api/security' || url === '/api/security/') {
+    setJson();
+    res.end(JSON.stringify(getSecurityData()));
     return;
   }
   if (url === '/api/chat' && req.method === 'POST') {

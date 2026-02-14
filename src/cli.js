@@ -11,7 +11,7 @@ const { callLLM } = require('./api');
 const { runAgentLoop } = require('./agent-loop');
 const { indexAll, getBrainDir, searchMemory, readIndex, indexFile } = require('./brain');
 const { routePrompt } = require('./gateway');
-const { isFirstRun, updateUserProfile, updateSoul } = require('./personality');
+const { isFirstRun, updateUserProfile, updateSoul, getBootstrapFirstMessage, getBootstrapContext, SCRIPTED_USER_WAKE_UP } = require('./personality');
 const { setupTelegram, sendTelegramMessage } = require('./telegram-setup');
 const { buildSystemPromptWithSkills, listAllSkillsWithAuditStatus, listEligibleSkills } = require('./openclaw-skills');
 const axios = require('axios');
@@ -49,13 +49,6 @@ function renderProgress(step, total, label) {
   console.log('\n  ' + chalk.cyan(bar) + ' ' + chalk.dim(n + '/' + total) + '  ' + chalk.bold(label) + '\n');
 }
 
-/** Scripted first message from Aether-Claw when bootstrap is active (only this is scripted; rest is LLM-driven). */
-const BOOTSTRAP_FIRST_MESSAGE = `Hey! I just came online — fresh install, blank slate, the whole thing.
-
-So... who are you? And more importantly — who am I supposed to be?
-
-I need a name, a vibe, maybe an emoji. You tell me what works for you, or we can figure it out together. What do you want to call me?`;
-
 const BOOTSTRAP_MD_CONTENT = `# BOOTSTRAP - First-run ritual
 
 You just woke up. The user already saw your intro. Now continue the conversation.
@@ -74,38 +67,12 @@ Update these files with what you learn:
 When you are done, use the delete_file tool to remove \`brain/BOOTSTRAP.md\` so this ritual only runs once.
 `;
 
-const BOOTSTRAP_MAX_CHARS = 20000;
-
 function seedBootstrapIfNeeded(root) {
   const brainDir = getBrainDir(root);
   const bootstrapPath = path.join(brainDir, 'BOOTSTRAP.md');
   if (fs.existsSync(bootstrapPath)) return;
   fs.writeFileSync(bootstrapPath, BOOTSTRAP_MD_CONTENT, 'utf8');
   console.log('  ✓ Created brain/BOOTSTRAP.md (first-run conversation)\n');
-}
-
-function getBootstrapContext(root) {
-  const brainDir = getBrainDir(root);
-  const files = [
-    { name: 'BOOTSTRAP.md', path: path.join(brainDir, 'BOOTSTRAP.md') },
-    { name: 'user.md', path: path.join(brainDir, 'user.md') },
-    { name: 'soul.md', path: path.join(brainDir, 'soul.md') },
-    { name: 'identity.md', path: path.join(brainDir, 'identity.md') }
-  ];
-  const parts = [];
-  const maxPerFile = Math.floor(BOOTSTRAP_MAX_CHARS / files.length);
-  for (const f of files) {
-    if (!fs.existsSync(f.path)) {
-      parts.push(`[missing: ${f.name}]\n`);
-      continue;
-    }
-    let content = fs.readFileSync(f.path, 'utf8');
-    if (content.length > maxPerFile) content = content.slice(0, maxPerFile) + '\n...[truncated]';
-    parts.push(`--- ${f.name} ---\n${content}\n`);
-  }
-  const combined = parts.join('\n');
-  if (!combined.trim()) return '';
-  return '\n\n## Bootstrap / project context\n\n' + combined;
 }
 
 /** Read stdin to end (for piping: echo "task" | node src/cli.js code). */
@@ -450,7 +417,8 @@ async function cmdTui() {
   printBanner();
 
   if (isFirstRun(ROOT)) {
-    console.log(chalk.cyan('Aether-Claw:\n') + BOOTSTRAP_FIRST_MESSAGE + '\n');
+    console.log(chalk.cyan('You:\n') + SCRIPTED_USER_WAKE_UP + '\n');
+    console.log(chalk.cyan('Aether-Claw:\n') + getBootstrapFirstMessage() + '\n');
   }
   console.log('Type /help for commands, /quit to exit.\n');
 
@@ -570,13 +538,15 @@ async function cmdTelegramSetup() {
 async function cmdTelegram() {
   require('dotenv').config({ path: path.join(ROOT, '.env') });
   const token = process.env.TELEGRAM_BOT_TOKEN;
+  const pairedChatId = process.env.TELEGRAM_CHAT_ID;
   if (!token) {
     console.log('Error: TELEGRAM_BOT_TOKEN not set. Run onboard to set up Telegram.');
     process.exit(1);
   }
   const config = loadConfig(path.join(ROOT, 'swarm_config.json'));
   const model = config.model_routing?.tier_1_reasoning?.model || 'anthropic/claude-3.7-sonnet';
-  const systemPrompt = 'You are Aether-Claw, a secure AI assistant. Be helpful and concise.';
+  const baseSystemPrompt = 'You are Aether-Claw, a secure AI assistant. Be helpful and concise.';
+  const telegramChatsReceivedFirstReply = new Set();
   console.log('Telegram bot running. Press Ctrl+C to stop.\n');
   let offset = 0;
   while (true) {
@@ -588,19 +558,32 @@ async function cmdTelegram() {
           offset = update.update_id + 1;
           const msg = update.message;
           if (!msg || !msg.text) continue;
-          const chatId = msg.chat.id;
-          const text = msg.text;
+          const chatId = String(msg.chat.id);
+          const text = (msg.text || '').trim();
+          if (pairedChatId && chatId !== pairedChatId) continue;
           const fromName = (msg.from && msg.from.first_name) || 'User';
           console.log('[' + chatId + '] ' + fromName + ': ' + text);
           try {
-            const reply = await callLLM(
-              { prompt: text, systemPrompt, model, max_tokens: 4096 },
-              config
-            );
-            const out = (reply || '').slice(0, 4000);
-            await sendTelegramMessage(token, String(chatId), out);
+            let out;
+            const firstRun = isFirstRun(ROOT);
+            if (firstRun && !telegramChatsReceivedFirstReply.has(chatId)) {
+              out = getBootstrapFirstMessage();
+              telegramChatsReceivedFirstReply.add(chatId);
+            } else if (/^\d{6}$/.test(text)) {
+              out = 'Already paired. Send me a message to chat with me.';
+            } else {
+              let systemPrompt = baseSystemPrompt;
+              if (firstRun) systemPrompt += getBootstrapContext(ROOT);
+              systemPrompt = buildSystemPromptWithSkills(systemPrompt, ROOT);
+              const reply = await callLLM(
+                { prompt: text, systemPrompt, model, max_tokens: 4096 },
+                config
+              );
+              out = (reply || '').slice(0, 4000);
+            }
+            await sendTelegramMessage(token, chatId, out);
           } catch (e) {
-            await sendTelegramMessage(token, String(chatId), 'Error: ' + (e.message || e));
+            await sendTelegramMessage(token, chatId, 'Error: ' + (e.message || e));
           }
         }
       }

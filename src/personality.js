@@ -1,10 +1,50 @@
 /**
  * OpenClaw-style first-run personality setup.
  * Updates brain/user.md and brain/soul.md with user name, agent name, vibe.
+ * Shared scripted "wake up" text and bootstrap context for TUI, Telegram, Web UI.
  */
 
 const path = require('path');
 const fs = require('fs');
+const { getBrainDir } = require('./brain');
+
+const SCRIPTED_USER_WAKE_UP = 'Wake up!';
+
+const BOOTSTRAP_FIRST_MESSAGE_TEXT = `Hey! I just came online — fresh install, blank slate, the whole thing.
+
+So... who are you? And more importantly — who am I supposed to be?
+
+I need a name, a vibe, maybe an emoji. You tell me what works for you, or we can figure it out together. What do you want to call me?`;
+
+function getBootstrapFirstMessage() {
+  return BOOTSTRAP_FIRST_MESSAGE_TEXT;
+}
+
+const BOOTSTRAP_MAX_CHARS = 20000;
+
+function getBootstrapContext(root) {
+  const brainDir = getBrainDir(root);
+  const files = [
+    { name: 'BOOTSTRAP.md', path: path.join(brainDir, 'BOOTSTRAP.md') },
+    { name: 'user.md', path: path.join(brainDir, 'user.md') },
+    { name: 'soul.md', path: path.join(brainDir, 'soul.md') },
+    { name: 'identity.md', path: path.join(brainDir, 'identity.md') }
+  ];
+  const parts = [];
+  const maxPerFile = Math.floor(BOOTSTRAP_MAX_CHARS / files.length);
+  for (const f of files) {
+    if (!fs.existsSync(f.path)) {
+      parts.push(`[missing: ${f.name}]\n`);
+      continue;
+    }
+    let content = fs.readFileSync(f.path, 'utf8');
+    if (content.length > maxPerFile) content = content.slice(0, maxPerFile) + '\n...[truncated]';
+    parts.push(`--- ${f.name} ---\n${content}\n`);
+  }
+  const combined = parts.join('\n');
+  if (!combined.trim()) return '';
+  return '\n\n## Bootstrap / project context\n\n' + combined;
+}
 
 function getUserPath(root) {
   return path.join(root, 'brain', 'user.md');
@@ -74,4 +114,15 @@ function updateSoul(root, agentName, vibe, dynamic) {
   fs.writeFileSync(soulPath, content, 'utf8');
 }
 
-module.exports = { isFirstRun, isBootstrapActive, getBootstrapPath, updateUserProfile, updateSoul, getUserPath, getSoulPath };
+module.exports = {
+  isFirstRun,
+  isBootstrapActive,
+  getBootstrapPath,
+  getBootstrapFirstMessage,
+  getBootstrapContext,
+  SCRIPTED_USER_WAKE_UP,
+  updateUserProfile,
+  updateSoul,
+  getUserPath,
+  getSoulPath
+};
