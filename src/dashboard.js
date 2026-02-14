@@ -22,7 +22,7 @@ const { runAgentLoop } = require('./agent-loop');
 const { isFirstRun, getBootstrapFirstMessage, getBootstrapContext } = require('./personality');
 
 const CHAT_SYSTEM = 'You are Aether-Claw, a secure AI assistant with memory and skills. Be helpful and concise.';
-const ACTION_SYSTEM = 'You are an expert programmer with access to tools: exec (run shell commands in the project), process (manage background exec sessions), read_file, write_file, memory_search. Use these tools to run commands, read and write files, and search memory. Prefer running code and editing files via tools rather than only showing code in chat.';
+const ACTION_SYSTEM = 'You are an expert programmer with access to tools: exec, process, read_file, write_file, create_directory, memory_search. Use these tools to run commands, read and write files, create folders, and search memory. To create a folder (e.g. on Desktop) use create_directory with path like ~/Desktop/foldername. Do not use fileoperations or createfolder—they do not exist. Only use tools from your tool list; never output raw FunctionCall or tool syntax in your message. Prefer running code and editing files via tools rather than only showing code in chat.';
 const REFLECT_SYSTEM = 'You are Aether-Claw. Help the user plan, break down problems, and think through options. Be structured and clear.';
 
 function getSystemStatus() {

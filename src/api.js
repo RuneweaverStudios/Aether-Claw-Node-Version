@@ -8,10 +8,9 @@ function stripToolCallLeakage(text) {
   const lower = text.toLowerCase();
   const idx1 = lower.indexOf('<|toolcall');
   const idx2 = lower.indexOf('<|tool_call');
+  const idx3 = lower.indexOf('<functioncall');
   let idx = -1;
-  if (idx1 >= 0 && idx2 >= 0) idx = Math.min(idx1, idx2);
-  else if (idx1 >= 0) idx = idx1;
-  else if (idx2 >= 0) idx = idx2;
+  for (const i of [idx1, idx2, idx3].filter((i) => i >= 0)) idx = idx < 0 ? i : Math.min(idx, i);
   if (idx >= 0) return text.slice(0, idx).trim();
   return text.trim();
 }

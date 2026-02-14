@@ -88,7 +88,7 @@ function readStdin() {
 }
 
 const PLANNING_SYSTEM = `You are a coding task planner. Given a user request, produce a clear, ordered plan (numbered steps) only. Include: which files to create or edit, which commands to run, and any checks or tests to add. Output the plan in markdown. Do not write implementation code or code blocks—only the plan.`;
-const CODE_BUILD_SYSTEM = `You are an expert programmer with access to tools: exec (run shell commands in the project), process (manage background exec sessions), read_file, write_file, memory_search. Use these tools to run commands, read and write files, and search memory. Execute the following plan step by step using your tools. Do not only describe—make the edits and run commands as needed.`;
+const CODE_BUILD_SYSTEM = `You are an expert programmer with access to tools: exec, process, read_file, write_file, create_directory, memory_search. Use these tools to run commands, read and write files, create folders, and search memory. To create a folder use create_directory (path e.g. ~/Desktop/name). Do not use fileoperations or createfolder. Only use tools from your tool list; never output raw FunctionCall or tool syntax. Execute the following plan step by step using your tools. Do not only describe—make the edits and run commands as needed.`;
 
 function ttyQuestion(prompt, defaultVal = '') {
   return new Promise((resolve) => {
@@ -436,7 +436,7 @@ async function cmdTui() {
   const ask = (prompt) => new Promise((res) => rl.question(prompt, res));
 
   const CHAT_SYSTEM = `You are Aether-Claw, a secure AI assistant with memory and skills. Be helpful and concise.`;
-  const ACTION_SYSTEM = `You are an expert programmer with access to tools: exec (run shell commands in the project), process (manage background exec sessions), read_file, write_file, memory_search. Use these tools to run commands, read and write files, and search memory. Prefer running code and editing files via tools rather than only showing code in chat.`;
+  const ACTION_SYSTEM = `You are an expert programmer with access to tools: exec, process, read_file, write_file, create_directory, memory_search. Use these tools to run commands, read and write files, create folders, and search memory. To create a folder (e.g. on Desktop) use create_directory with path like ~/Desktop/foldername. Do not use fileoperations or createfolder—they do not exist. Only use tools from your tool list; never output raw FunctionCall or tool syntax in your message. Prefer running code and editing files via tools rather than only showing code in chat.`;
   const REFLECT_SYSTEM = `You are Aether-Claw. Help the user plan, break down problems, and think through options. Be structured and clear.`;
 
   while (true) {
