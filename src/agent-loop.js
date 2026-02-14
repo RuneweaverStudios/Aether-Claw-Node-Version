@@ -48,6 +48,12 @@ async function chatWithTools(messages, config, options = {}) {
     } catch (e) {
       lastError = e;
       const status = e.response?.status;
+      const body = e.response?.data;
+      const apiMsg = body?.error?.message || body?.message || body?.error;
+      const detail = apiMsg ? (typeof apiMsg === 'string' ? apiMsg : JSON.stringify(apiMsg)) : e.message;
+      if (status === 400) {
+        throw new Error('API request rejected (400): ' + detail);
+      }
       const retryable = status === 429 || (status >= 500 && status < 600);
       if (!retryable || modelsToTry.indexOf(model) === modelsToTry.length - 1) break;
     }
@@ -89,7 +95,7 @@ async function runAgentLoop(workspaceRoot, userMessage, systemPrompt, config, op
     totalToolCalls += toolCalls.length;
     messages.push({
       role: 'assistant',
-      content: msg.content || null,
+      content: (msg.content && typeof msg.content === 'string') ? msg.content : '',
       tool_calls: toolCalls
     });
 
