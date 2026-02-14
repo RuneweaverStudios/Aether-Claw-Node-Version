@@ -62,9 +62,22 @@ function isBootstrapActive(root) {
   return fs.existsSync(getBootstrapPath(root));
 }
 
-/** First run = bootstrap not complete (BOOTSTRAP.md still exists). After agent deletes it, false. */
+/** Default soul template (must match cli.js when creating soul.md). */
+const SOUL_DEFAULT_TEMPLATE = '# Soul\n\nAgent identity and goals.\n';
+
+/** True if soul.md exists and has been customized (not just the default template). */
+function hasEstablishedSoul(root) {
+  const soulPath = getSoulPath(root);
+  if (!fs.existsSync(soulPath)) return false;
+  const content = fs.readFileSync(soulPath, 'utf8').trim();
+  if (content.length <= SOUL_DEFAULT_TEMPLATE.length + 2) return false;
+  if (content === SOUL_DEFAULT_TEMPLATE.trim()) return false;
+  return true;
+}
+
+/** First run = bootstrap active and no established soul. Established soul = not first run. */
 function isFirstRun(root) {
-  return isBootstrapActive(root);
+  return isBootstrapActive(root) && !hasEstablishedSoul(root);
 }
 
 function updateUserProfile(root, name, projects, vibe) {

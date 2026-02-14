@@ -386,12 +386,14 @@ fi
 [ -n "$RESTORE_ENV" ] && [ -f /tmp/aethernode-env-backup ] && mv /tmp/aethernode-env-backup "$INSTALL_DIR/.env" && printf "${GREEN}✓${NC} Restored credentials\n"
 [ -n "$RESTORE_CONFIG" ] && [ -f /tmp/aethernode-config-backup ] && mv /tmp/aethernode-config-backup "$INSTALL_DIR/swarm_config.json" && printf "${GREEN}✓${NC} Restored config\n"
 if [ -n "$RESTORE_BRAIN" ] && [ -d /tmp/aethernode-brain-backup ]; then
+    rm -rf "$INSTALL_DIR/brain"
     mkdir -p "$INSTALL_DIR/brain"
     cp -r /tmp/aethernode-brain-backup/* "$INSTALL_DIR/brain/" 2>/dev/null
     rm -rf /tmp/aethernode-brain-backup
     printf "${GREEN}✓${NC} Restored brain\n"
 fi
 if [ -n "$RESTORE_SKILLS" ] && [ -d /tmp/aethernode-skills-backup ]; then
+    rm -rf "$INSTALL_DIR/skills"
     mkdir -p "$INSTALL_DIR/skills"
     cp -r /tmp/aethernode-skills-backup/* "$INSTALL_DIR/skills/" 2>/dev/null
     rm -rf /tmp/aethernode-skills-backup
