@@ -42,14 +42,17 @@ if [ -d "$INSTALL_DIR" ] && [ "$SCRIPT_DIR" = "$(cd "$INSTALL_DIR" && pwd)" ] &&
     fi
 fi
 
+FORCE_GATEWAY=0
 while [[ $# -gt 0 ]]; do
     case $1 in
         --branch|-b) BRANCH="$2"; shift 2 ;;
         --dir|-d) INSTALL_DIR="$2"; shift 2 ;;
+        --force|-f) FORCE_GATEWAY=1; shift ;;
         --help|-h)
             echo "Usage: curl -sSL <url> | bash -s -- [OPTIONS]"
             echo "  --branch, -b      Git branch (default: main)"
             echo "  --dir, -d DIR     Install directory (default: ~/.aether-claw-node)"
+            echo "  --force, -f       Force gateway install: kill process on gateway port first so daemon can bind"
             echo "  Aether-Claw is installed globally so 'aetherclaw' is on your PATH."
             exit 0
             ;;
@@ -198,6 +201,27 @@ RESTORE_BRAIN=""
 RESTORE_SKILLS=""
 WIPE_CREDS_ONLY=""
 
+# Read gateway port from swarm_config.json in install dir (default 18789).
+get_gateway_port() {
+  local port=18789
+  if [ -f "$INSTALL_DIR/swarm_config.json" ]; then
+    port=$(node -e "try{const fs=require('fs');const c=JSON.parse(fs.readFileSync('$INSTALL_DIR/swarm_config.json','utf8')); console.log(c.gateway&&c.gateway.port||18789)}catch(e){console.log(18789)}" 2>/dev/null) || true
+  fi
+  echo "${port:-18789}"
+}
+
+# Kill any process listening on the gateway port so the daemon can bind.
+kill_gateway_port() {
+  local port
+  port=$(get_gateway_port)
+  local pids
+  pids=$(lsof -ti ":$port" 2>/dev/null) || true
+  if [ -n "$pids" ]; then
+    echo "$pids" | xargs kill -9 2>/dev/null || true
+    printf "  ${GREEN}✓${NC} Killed process(es) on port %s\n" "$port"
+  fi
+}
+
 gateway_prompt() {
   [ "$(uname -s)" != "Darwin" ] && return 0
   LAUNCH_AGENTS="${HOME}/Library/LaunchAgents"
@@ -231,9 +255,11 @@ gateway_prompt() {
     gw_choice=${gw_choice:-3}
     if [ "$gw_choice" = "1" ]; then
       launchctl unload "$PLIST" 2>/dev/null
+      [ "$FORCE_GATEWAY" = "1" ] && kill_gateway_port
       launchctl load "$PLIST" 2>/dev/null && { printf "  ${GREEN}✓${NC} Gateway daemon restarted\n"; GW_DID_ACTION=1; } || printf "  ${YELLOW}⚠${NC} Could not restart\n"
     elif [ "$gw_choice" = "2" ]; then
       launchctl unload "$PLIST" 2>/dev/null
+      [ "$FORCE_GATEWAY" = "1" ] && kill_gateway_port
       mkdir -p "$LAUNCH_AGENTS"
       cat > "$PLIST" << PLISTEOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -272,6 +298,7 @@ PLISTEOF
     fi
     gw_install=${gw_install:-y}
     if [ "$gw_install" = "y" ] || [ "$gw_install" = "Y" ]; then
+      [ "$FORCE_GATEWAY" = "1" ] && kill_gateway_port
       mkdir -p "$LAUNCH_AGENTS"
       cat > "$PLIST" << PLISTEOF
 <?xml version="1.0" encoding="UTF-8"?>
