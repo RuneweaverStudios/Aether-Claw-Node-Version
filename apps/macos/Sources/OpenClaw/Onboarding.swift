@@ -7,7 +7,7 @@ import OpenClawIPC
 import SwiftUI
 
 enum UIStrings {
-    static let welcomeTitle = "Welcome to OpenClaw"
+    static let welcomeTitle = "Welcome to AetherClaw"
 }
 
 @MainActor

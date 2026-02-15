@@ -134,6 +134,6 @@ struct GatewayDiscoveryMenu: View {
         } label: {
             Image(systemName: "dot.radiowaves.left.and.right")
         }
-        .help("Discover OpenClaw gateways on your LAN")
+        .help("Discover AetherClaw gateways on your LAN")
     }
 }

@@ -32,9 +32,9 @@ extension OnboardingView {
     func welcomePage() -> some View {
         self.onboardingPage {
             VStack(spacing: 22) {
-                Text("Welcome to OpenClaw")
+                Text("Welcome to AetherClaw")
                     .font(.largeTitle.weight(.semibold))
-                Text("OpenClaw is a powerful personal AI assistant that can connect to WhatsApp or Telegram.")
+                Text("AetherClaw is a powerful personal AI assistant that can connect to WhatsApp or Telegram.")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -57,7 +57,7 @@ extension OnboardingView {
                                 "The connected AI agent (e.g. Claude) can trigger powerful actions on your Mac, " +
                                     "including running commands, reading/writing files, and capturing screenshots — " +
                                     "depending on the permissions you grant.\n\n" +
-                                    "Only enable OpenClaw if you understand the risks and trust the prompts and " +
+                                    "Only enable AetherClaw if you understand the risks and trust the prompts and " +
                                     "integrations you use.")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
@@ -76,7 +76,7 @@ extension OnboardingView {
             Text("Choose your Gateway")
                 .font(.largeTitle.weight(.semibold))
             Text(
-                "OpenClaw uses a single Gateway that stays running. Pick this Mac, " +
+                "AetherClaw uses a single Gateway that stays running. Pick this Mac, " +
                     "connect to a discovered gateway nearby, or configure later.")
                 .font(.body)
                 .foregroundStyle(.secondary)
@@ -239,7 +239,7 @@ extension OnboardingView {
                                             .font(.callout.weight(.semibold))
                                             .frame(width: labelWidth, alignment: .leading)
                                         TextField(
-                                            "/Applications/OpenClaw.app/.../openclaw",
+                                            "/Applications/AetherClaw.app/.../openclaw",
                                             text: self.$state.remoteCliPath)
                                             .textFieldStyle(.roundedBorder)
                                             .frame(width: fieldWidth)
@@ -337,7 +337,7 @@ extension OnboardingView {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 540)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("OpenClaw supports any model — we strongly recommend Opus 4.6 for the best experience.")
+            Text("AetherClaw supports any model — we strongly recommend Opus 4.6 for the best experience.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -377,7 +377,7 @@ extension OnboardingView {
                 }
 
                 Text(
-                    "This lets OpenClaw use Claude immediately. Credentials are stored at " +
+                    "This lets AetherClaw use Claude immediately. Credentials are stored at " +
                         "`~/.openclaw/credentials/oauth.json` (owner-only).")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -495,7 +495,7 @@ extension OnboardingView {
         self.onboardingPage {
             Text("Grant permissions")
                 .font(.largeTitle.weight(.semibold))
-            Text("These macOS permissions let OpenClaw automate apps and capture context on this Mac.")
+            Text("These macOS permissions let AetherClaw automate apps and capture context on this Mac.")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -596,7 +596,7 @@ extension OnboardingView {
             Text("Agent workspace")
                 .font(.largeTitle.weight(.semibold))
             Text(
-                "OpenClaw runs the agent from a dedicated workspace so it can load `AGENTS.md` " +
+                "AetherClaw runs the agent from a dedicated workspace so it can load `AGENTS.md` " +
                     "and write files there without mixing into your other projects.")
                 .font(.body)
                 .foregroundStyle(.secondary)
@@ -730,7 +730,7 @@ extension OnboardingView {
                 }
                 self.featureRow(
                     title: "Open the menu bar panel",
-                    subtitle: "Click the OpenClaw menu bar icon for quick chat and status.",
+                    subtitle: "Click the AetherClaw menu bar icon for quick chat and status.",
                     systemImage: "bubble.left.and.bubble.right")
                 self.featureActionRow(
                     title: "Connect WhatsApp or Telegram",

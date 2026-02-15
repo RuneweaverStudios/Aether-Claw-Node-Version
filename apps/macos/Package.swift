@@ -5,7 +5,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "AetherClawMac",
+    name: "OpenClawMac",
     platforms: [
         .macOS(.v15),
     ],
@@ -17,7 +17,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/orchetect/MenuBarExtraAccess", exact: "1.2.2"),
-        .package(url: "https://github.com/swiftlang/swift-subprocess.git", from: "0.1.0"),
+        .package(path: "Vendor/swift-subprocess"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.8.0"),
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.8.1"),
         .package(url: "https://github.com/steipete/Peekaboo.git", branch: "main"),
@@ -40,8 +40,8 @@ let package = Package(
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency"),
             ]),
-        .executableTarget(
-            name: "OpenClaw",
+        .target(
+            name: "OpenClawApp",
             dependencies: [
                 "OpenClawIPC",
                 "OpenClawDiscovery",
@@ -56,13 +56,21 @@ let package = Package(
                 .product(name: "PeekabooBridge", package: "Peekaboo"),
                 .product(name: "PeekabooAutomationKit", package: "Peekaboo"),
             ],
+            path: "Sources/OpenClaw",
             exclude: [
                 "Resources/Info.plist",
             ],
             resources: [
-                .copy("Resources/OpenClaw.icns"),
+                .copy("Resources/AetherClaw.icns"),
                 .copy("Resources/DeviceModels"),
             ],
+            swiftSettings: [
+                .enableUpcomingFeature("StrictConcurrency"),
+            ]),
+        .executableTarget(
+            name: "OpenClaw",
+            dependencies: ["OpenClawApp"],
+            path: "Sources/OpenClawEntry",
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency"),
             ]),
@@ -81,7 +89,7 @@ let package = Package(
             name: "OpenClawIPCTests",
             dependencies: [
                 "OpenClawIPC",
-                "OpenClaw",
+                "OpenClawApp",
                 "OpenClawDiscovery",
                 .product(name: "OpenClawProtocol", package: "OpenClawKit"),
                 .product(name: "SwabbleKit", package: "swabble"),

@@ -7,8 +7,7 @@ import OSLog
 import Security
 import SwiftUI
 
-@main
-struct OpenClawApp: App {
+public struct OpenClawApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var state: AppState
     private static let logger = Logger(subsystem: "ai.openclaw", category: "app")
@@ -31,14 +30,14 @@ struct OpenClawApp: App {
         HoverHUDController.shared.setSuppressed(self.isMenuPresented || self.isPanelVisible)
     }
 
-    init() {
+    public init() {
         OpenClawLogging.bootstrapIfNeeded()
 
         Self.applyAttachOnlyOverrideIfNeeded()
         _state = State(initialValue: AppStateStore.shared)
     }
 
-    var body: some Scene {
+    public var body: some Scene {
         MenuBarExtra { MenuContent(state: self.state, updater: self.delegate.updaterController) } label: {
             CritterStatusLabel(
                 isPaused: self.state.isPaused,

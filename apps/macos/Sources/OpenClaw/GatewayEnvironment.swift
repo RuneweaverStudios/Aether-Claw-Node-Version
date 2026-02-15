@@ -73,6 +73,8 @@ enum GatewayEnvironment {
     private static let logger = Logger(subsystem: "ai.openclaw", category: "gateway.env")
     private static let supportedBindModes: Set<String> = ["loopback", "tailnet", "lan", "auto"]
 
+    /// Gateway port resolution order: env → app config (openclaw.json) → project swarm_config.json → UserDefaults → 18789.
+    /// When the gateway is run from the project (e.g. `aetherclaw gateway`), it uses swarm_config.json; this ensures the app connects to that port.
     static func gatewayPort() -> Int {
         if let raw = ProcessInfo.processInfo.environment["OPENCLAW_GATEWAY_PORT"] {
             let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -81,8 +83,28 @@ enum GatewayEnvironment {
         if let configPort = OpenClawConfigFile.gatewayPort(), configPort > 0 {
             return configPort
         }
+        if let swarmPort = Self.gatewayPortFromSwarmConfig(projectRoot: CommandResolver.projectRoot()), swarmPort > 0 {
+            return swarmPort
+        }
         let stored = UserDefaults.standard.integer(forKey: "gatewayPort")
         return stored > 0 ? stored : 18789
+    }
+
+    /// Reads `gateway.port` from `swarm_config.json` in the given project root (Node/gateway repo). Returns nil if file missing or invalid.
+    static func gatewayPortFromSwarmConfig(projectRoot: URL) -> Int? {
+        let url = projectRoot.appendingPathComponent("swarm_config.json", isDirectory: false)
+        guard FileManager().isReadableFile(atPath: url.path) else { return nil }
+        guard let data = try? Data(contentsOf: url),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let gateway = root["gateway"] as? [String: Any]
+        else { return nil }
+        if let port = gateway["port"] as? Int, port > 0 { return port }
+        if let num = gateway["port"] as? NSNumber, num.intValue > 0 { return num.intValue }
+        if let raw = gateway["port"] as? String,
+           let parsed = Int(raw.trimmingCharacters(in: .whitespacesAndNewlines)),
+           parsed > 0
+        { return parsed }
+        return nil
     }
 
     static func expectedGatewayVersion() -> Semver? {
