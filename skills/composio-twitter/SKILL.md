@@ -9,7 +9,7 @@ description: >
   "what are people saying about", "check x for", "x search",
   "/x-research", (2) user wants to find replies, mentions, or engagement data,
   (3) user wants to monitor specific accounts or topics.
-  NOT for: posting tweets (use cortana-post.py), account management.
+  NOT for: posting tweets (use a posting skill if available), account management.
 metadata: {"openclaw":{"requires":{"bins":["bun"],"env":["COMPOSIO_API_KEY"]}}}
 ---
 

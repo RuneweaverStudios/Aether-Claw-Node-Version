@@ -3,44 +3,17 @@ Started: 2026-02-12
 ---
 
 ## Codebase Patterns
-- Project uses Python 3.11+ with type hints
-- Memory files are Markdown-based for human readability
-- SQLite used for indexing (brain_index.db)
-- RSA-2048 keys for skill signing with cryptography library
-- All configurations stored in JSON format
-- Logging follows structured format with ISO 8601 timestamps
-- All modules have CLI entry points with argparse
-- GLM API calls use retry logic with exponential backoff
-- Workers log thinking process before producing output
+- Project is Node.js only (no Python). Use Node 18+.
+- Memory files are Markdown-based (brain/*.md). Index with aetherclaw index.
+- Config in swarm_config.json; secrets in .env.
+- Skills are OpenClaw-style (SKILL.md in skills/). Audit via skill-audit.js.
+- Gateway: WebSocket + optional HTTP dashboard in one process (src/daemon.js).
+- CLI entry point: src/cli.js (aetherclaw).
 
 ---
 
-## 2026-02-12T22:00:00 - US-001 to US-019, US-022 to US-031
-- Implemented core Aether-Claw system with 29/31 user stories complete
-- Files changed: 28 new files created
-- **Learnings for future iterations:**
-  - The cryptography library requires specific padding (PSS) for RSA signatures
-  - Bandit scanner output is JSON format by default with -f json
-  - Streamlit requires specific page config before other commands
-  - GLM API uses Bearer token authentication
-  - psutil is optional but provides better system monitoring
-  - ThreadPoolExecutor works well for swarm worker orchestration
-  - SQLite FTS5 provides excellent full-text search for memory
-  - Audit log should be append-only for security compliance
-
----
-
-## Remaining Tasks
-
-### US-020: Docker isolation wrapper
-- Need to create isolation/docker_wrapper.py
-- Requires docker-py library
-- Container creation with resource limits
-- Network disabled by default
-
-### US-021: Git worktree manager
-- Need to create isolation/worktree.py
-- Branch management for worker isolation
-- Cleanup on completion
+## Completed
+- Node gateway, TUI, Telegram, dashboard, macOS app.
+- Ralph tools: ralph_get_next_story, ralph_mark_story_passed, ralph_append_progress.
 
 ---

@@ -87,7 +87,7 @@ Record all kill switch activations:
 
 ---
 
-*This file should only be appended to, never modified. Use brain_index.py to index for search.*
+*This file should only be appended to, never modified. Use `aetherclaw index` to index brain for search.*
 ### 2026-02-13T03:23:59.384426 | INFO | HeartbeatDaemon | TASK_STARTED
 - Executing task: git_repo_scan
 ### 2026-02-13T03:23:59.965860 | INFO | HeartbeatDaemon | TASK_COMPLETED

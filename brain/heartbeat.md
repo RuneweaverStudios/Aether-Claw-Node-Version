@@ -143,7 +143,7 @@ Immediately halt heartbeat if:
 
 ## Next Heartbeat
 
-**Scheduled**: [Will be set by heartbeat_daemon.py]
+**Scheduled**: [Set by gateway daemon / aetherclaw daemon]
 **Tasks to Run**: [Dynamically determined]
 
 ---

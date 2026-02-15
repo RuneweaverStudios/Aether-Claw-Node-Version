@@ -33,6 +33,13 @@ struct ContentView: View {
             applyDetectedGatewayURLIfNeeded()
             if storedGatewayURL.isEmpty { storedGatewayURL = "ws://127.0.0.1:18789" }
             if gatewayURLInput.isEmpty { gatewayURLInput = storedGatewayURL }
+            // Auto-connect to gateway on launch when we have a URL
+            if !gateway.isConnected && !storedGatewayURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                gateway.connect(wsURL: storedGatewayURL, token: gatewayToken.isEmpty ? nil : gatewayToken)
+            }
+            if nodeModeEnabled && !nodeClient.isConnected {
+                nodeClient.connect(wsURL: storedGatewayURL, token: gatewayToken.isEmpty ? nil : gatewayToken)
+            }
         }
         .onChange(of: storedGatewayURL) { newVal in
             if gatewayURLInput != newVal { gatewayURLInput = newVal }
