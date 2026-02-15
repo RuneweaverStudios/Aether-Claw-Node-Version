@@ -271,6 +271,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// When user clicks the Dock icon (or activates app with no window), open Settings so they can configure gateway and access the app.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        Task { @MainActor in
+            guard let app = NSApp else { return }
+            let hasVisibleRegularWindow = app.windows.contains { w in
+                w.isVisible && w.frame.width > 200 && w.frame.height > 200 &&
+                    !w.isKind(of: NSPanel.self) &&
+                    w.contentViewController != nil
+            }
+            if !hasVisibleRegularWindow {
+                SettingsWindowOpener.shared.open()
+            }
+        }
+    }
+
     @MainActor
     func applicationDidFinishLaunching(_ notification: Notification) {
         if self.isDuplicateInstance() {
@@ -278,6 +293,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         self.state = AppStateStore.shared
+        // AetherClaw: ensure Dock icon shows at least once so users can find Settings (click Dock icon).
+        let isAetherClaw = (Bundle.main.infoDictionary?["CFBundleName"] as? String) == "AetherClaw"
+        if isAetherClaw, !UserDefaults.standard.bool(forKey: "aetherclaw.dockShownOnce") {
+            UserDefaults.standard.set(true, forKey: "aetherclaw.dockShownOnce")
+            UserDefaults.standard.set(true, forKey: showDockIconKey)
+            AppStateStore.shared.showDockIcon = true
+        }
         AppActivationPolicy.apply(showDockIcon: self.state?.showDockIcon ?? false)
         if let state {
             Task { await ConnectionModeCoordinator.shared.apply(mode: state.connectionMode, paused: state.isPaused) }

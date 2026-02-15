@@ -234,6 +234,13 @@ extension MenuSessionsInjector {
                     cursor += 1
                 }
             }
+            if !isConnected {
+                let settingsItem = NSMenuItem(title: "Open Settings…", action: #selector(self.openSettingsFromMenu(_:)), keyEquivalent: "")
+                settingsItem.target = self
+                settingsItem.tag = self.tag
+                menu.insertItem(settingsItem, at: cursor)
+                cursor += 1
+            }
         } else {
             let headerItem = NSMenuItem()
             headerItem.tag = self.tag
@@ -259,6 +266,11 @@ extension MenuSessionsInjector {
                         symbolName: "bolt.slash",
                         width: width),
                     at: cursor)
+                cursor += 1
+                let settingsItem = NSMenuItem(title: "Open Settings…", action: #selector(self.openSettingsFromMenu(_:)), keyEquivalent: "")
+                settingsItem.target = self
+                settingsItem.tag = self.tag
+                menu.insertItem(settingsItem, at: cursor)
                 cursor += 1
             }
         }
@@ -1011,6 +1023,11 @@ extension MenuSessionsInjector {
                 }
             }
         }
+    }
+
+    @objc
+    private func openSettingsFromMenu(_ sender: Any?) {
+        SettingsWindowOpener.shared.open()
     }
 
     @objc

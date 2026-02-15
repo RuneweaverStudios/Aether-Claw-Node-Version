@@ -26,7 +26,8 @@ const TELEGRAM_API = 'https://api.telegram.org/bot';
 function getGatewayConfig() {
   try {
     const config = loadConfig(path.join(ROOT, 'swarm_config.json'));
-    const port = Number(config.gateway?.port) || 18789;
+    // PORT from environment (e.g. LaunchAgent) overrides config so Mac app install --port works
+    const port = Number(process.env.PORT) || Number(config.gateway?.port) || 18789;
     const bind = config.gateway?.bind === 'loopback' || config.gateway?.bind === '127.0.0.1' ? '127.0.0.1' : (config.gateway?.bind || '127.0.0.1');
     const dashboard = config.gateway?.dashboard !== false;
     return { port, host: bind, dashboard };

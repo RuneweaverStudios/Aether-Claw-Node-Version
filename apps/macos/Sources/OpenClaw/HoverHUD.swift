@@ -26,7 +26,7 @@ final class HoverHUDController {
     private var anchorProvider: (() -> NSRect?)?
 
     private let width: CGFloat = 360
-    private let height: CGFloat = 74
+    private let height: CGFloat = 92
     private let padding: CGFloat = 8
     private let hoverShowDelay: TimeInterval = 0.18
 
@@ -83,6 +83,13 @@ final class HoverHUDController {
         Task { @MainActor in
             let sessionKey = await WebChatManager.shared.preferredSessionKey()
             WebChatManager.shared.togglePanel(sessionKey: sessionKey, anchorProvider: anchorProvider)
+        }
+    }
+
+    func openSettings() {
+        self.dismiss(reason: "openSettings")
+        Task { @MainActor in
+            SettingsWindowOpener.shared.open()
         }
     }
 
@@ -306,6 +313,15 @@ private struct HoverHUDView: View {
         }
         .onTapGesture {
             self.controller.openChat()
+        }
+        .overlay(alignment: .bottomTrailing) {
+            Button("Settings…") {
+                self.controller.openSettings()
+            }
+            .buttonStyle(.borderless)
+            .font(.system(size: 11, weight: .medium))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
         }
     }
 }

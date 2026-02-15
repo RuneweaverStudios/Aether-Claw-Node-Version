@@ -414,6 +414,39 @@ function createWsGateway(opts = {}) {
           sendRes(ws, msg.id, true, { connections: presence });
           break;
         }
+        // OpenClaw protocol: setup wizard (Mac app). Node gateway has no interactive wizard; return done immediately.
+        case 'wizard.start': {
+          const sessionId = 'mac-wizard-' + Date.now();
+          sendRes(ws, msg.id, true, {
+            sessionId,
+            done: true,
+            step: null,
+            status: 'done',
+            error: null
+          });
+          break;
+        }
+        case 'wizard.next': {
+          sendRes(ws, msg.id, true, {
+            done: true,
+            step: null,
+            status: 'done',
+            error: null
+          });
+          break;
+        }
+        case 'wizard.status': {
+          sendRes(ws, msg.id, true, {
+            status: 'done',
+            step: null,
+            error: null
+          });
+          break;
+        }
+        case 'wizard.cancel': {
+          sendRes(ws, msg.id, true, { status: 'cancelled', error: null });
+          break;
+        }
         default:
           sendRes(ws, msg.id, false, { error: 'Unknown method: ' + method });
       }

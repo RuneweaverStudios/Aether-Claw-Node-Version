@@ -115,16 +115,41 @@ final class ControlChannel {
         }
     }
 
+    /// Max time to wait for initial connection so the UI doesn't hang on "Connecting…" (gateway down or wrong port).
+    private static let initialConnectionTimeoutSeconds: UInt64 = 8
+
     func refreshEndpoint(reason: String) async {
         self.logger.info("control channel refresh endpoint reason=\(reason, privacy: .public)")
         self.state = .connecting
         do {
-            try await self.establishGatewayConnection()
+            try await self.establishWithTimeout()
             self.state = .connected
             PresenceReporter.shared.sendImmediate(reason: "connect")
         } catch {
             let message = self.friendlyGatewayMessage(error)
             self.state = .degraded(message)
+        }
+    }
+
+    private func establishWithTimeout() async throws {
+        let port = GatewayEnvironment.gatewayPort()
+        let connectTask = Task { try await self.establishGatewayConnection(timeoutMs: 4000) }
+        let timeoutTask = Task {
+            try? await Task.sleep(nanoseconds: Self.initialConnectionTimeoutSeconds * 1_000_000_000)
+            connectTask.cancel()
+        }
+        do {
+            _ = try await connectTask.value
+            timeoutTask.cancel()
+        } catch {
+            timeoutTask.cancel()
+            if error is CancellationError {
+                throw NSError(
+                    domain: "Gateway",
+                    code: 5,
+                    userInfo: [NSLocalizedDescriptionKey: "Connection timed out after \(Self.initialConnectionTimeoutSeconds)s. Ensure the AetherClaw gateway is running (port \(port), e.g. from swarm_config.json)."])
+            }
+            throw error
         }
     }
 

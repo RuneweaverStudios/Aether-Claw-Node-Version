@@ -11,6 +11,8 @@ enum CommandResolver {
         if FileManager().isReadableFile(atPath: openclawEntry) { return openclawEntry }
         let binEntry = root.appendingPathComponent("bin/openclaw.js").path
         if FileManager().isReadableFile(atPath: binEntry) { return binEntry }
+        let srcCliEntry = root.appendingPathComponent("src/cli.js").path
+        if FileManager().isReadableFile(atPath: srcCliEntry) { return srcCliEntry }
         return nil
     }
 

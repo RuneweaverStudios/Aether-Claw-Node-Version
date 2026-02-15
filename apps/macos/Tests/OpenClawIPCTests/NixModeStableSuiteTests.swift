@@ -5,7 +5,7 @@ import Testing
 @Suite(.serialized)
 struct NixModeStableSuiteTests {
     @Test func resolvesFromStableSuiteForAppBundles() {
-        let suite = UserDefaults(suiteName: launchdLabel)!
+        let suite = UserDefaults(suiteName: openclawStableSuiteName)!
         let key = "openclaw.nixMode"
         let prev = suite.object(forKey: key)
         defer {
@@ -26,7 +26,7 @@ struct NixModeStableSuiteTests {
     }
 
     @Test func ignoresStableSuiteOutsideAppBundles() {
-        let suite = UserDefaults(suiteName: launchdLabel)!
+        let suite = UserDefaults(suiteName: openclawStableSuiteName)!
         let key = "openclaw.nixMode"
         let prev = suite.object(forKey: key)
         defer {

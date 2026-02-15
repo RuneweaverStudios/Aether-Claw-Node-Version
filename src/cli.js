@@ -1467,6 +1467,74 @@ program
   .description('gateway daemon (heartbeat + Telegram)')
   .action(() => require('./daemon'));
 
+// Gateway launchd management for macOS app (setup wizard creates gateway via this)
+const gatewayCmd = program.command('gateway').description('manage gateway launchd service (for macOS app)');
+gatewayCmd
+  .command('install')
+  .description('install gateway as LaunchAgent (ai.openclaw.gateway)')
+  .option('--force', 'overwrite existing plist')
+  .option('--port <port>', 'gateway port (passed as PORT env to daemon)', '18789')
+  .option('--runtime <runtime>', 'ignored (node only)', 'node')
+  .action(function () {
+    const opts = this.opts();
+    const { installGatewayForMacApp } = require('./gateway-install');
+    const port = opts.port ? parseInt(opts.port, 10) : undefined;
+    const result = installGatewayForMacApp(ROOT, port);
+    if (program.opts().json || process.argv.includes('--json')) {
+      console.log(JSON.stringify(result));
+      if (!result.ok) process.exit(1);
+    } else {
+      if (result.ok) console.log('Gateway installed and running.');
+      else { console.error(result.error); process.exit(1); }
+    }
+  });
+gatewayCmd
+  .command('uninstall')
+  .description('uninstall gateway LaunchAgent')
+  .action(() => {
+    const { uninstallGatewayForMacApp } = require('./gateway-install');
+    const result = uninstallGatewayForMacApp();
+    if (program.opts().json || process.argv.includes('--json')) {
+      console.log(JSON.stringify(result));
+      if (!result.ok) process.exit(1);
+    } else {
+      if (result.ok) console.log('Gateway uninstalled.');
+      else { console.error(result.error); process.exit(1); }
+    }
+  });
+gatewayCmd
+  .command('status')
+  .description('show whether gateway LaunchAgent is loaded')
+  .option('--json', 'output JSON')
+  .option('--no-probe', 'do not probe gateway health')
+  .action(function () {
+    const opts = this.opts();
+    const { statusGatewayForMacApp } = require('./gateway-install');
+    const result = statusGatewayForMacApp();
+    if (program.opts().json || process.argv.includes('--json') || opts.json) {
+      console.log(JSON.stringify(result));
+    } else {
+      console.log(result.service?.loaded ? 'Gateway service is loaded.' : 'Gateway service is not loaded.');
+    }
+  });
+gatewayCmd
+  .command('restart')
+  .description('restart gateway LaunchAgent')
+  .option('--port <port>', 'gateway port', '18789')
+  .action(function () {
+    const opts = this.opts();
+    const { restartGatewayForMacApp } = require('./gateway-install');
+    const port = opts.port ? parseInt(opts.port, 10) : undefined;
+    const result = restartGatewayForMacApp(ROOT, port);
+    if (program.opts().json || process.argv.includes('--json')) {
+      console.log(JSON.stringify(result));
+      if (!result.ok) process.exit(1);
+    } else {
+      if (result.ok) console.log('Gateway restarted.');
+      else { console.error(result.error); process.exit(1); }
+    }
+  });
+
 program
   .command('dashboard')
   .description('web dashboard (Chat, Status, Config)')
