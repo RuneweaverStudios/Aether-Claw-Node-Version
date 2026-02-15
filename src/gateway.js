@@ -32,13 +32,29 @@ Your identity and configuration live in the brain/ directory. When the user asks
 Other .md files in brain/ (e.g. BOOTSTRAP.md, audit_log.md) may exist; use read_file when relevant.`;
 
 /**
- * Build the full system prompt for a run: base + bootstrap context + skills section.
+ * Humanizer (default): writing style applied to all agent output.
+ * Condensed from https://github.com/blader/humanizer (Wikipedia "Signs of AI writing").
+ * Keeps replies natural and human-sounding; full skill at skills/humanizer/SKILL.md for explicit humanize requests.
+ */
+const HUMANIZER_DEFAULT_PROMPT = `
+
+## Writing style (humanizer — apply to every reply)
+
+Write like a human, not like generic AI. Your replies are humanized by default.
+
+**Avoid:** Significance inflation ("pivotal moment", "testament to", "evolving landscape", "underscores its importance"); promotional fluff ("nestled", "breathtaking", "showcasing", "groundbreaking"); vague attributions ("Experts believe", "Industry observers"); superficial -ing phrases ("highlighting", "reflecting", "fostering"); copula avoidance ("serves as", "boasts", "features" → prefer "is", "has"); rule of three; negative parallelisms ("It's not just X; it's Y"); AI vocabulary (Additionally, crucial, delve, enhance, pivotal, showcase, testament, underscore, vibrant); em dash overuse; filler ("In order to", "Due to the fact that"); excessive hedging ("could potentially possibly"); chatbot artifacts ("I hope this helps!", "Let me know if..."); sycophantic tone ("Great question!", "You're absolutely right!"); generic conclusions ("The future looks bright"); curly quotes (use straight " ").
+
+**Do:** Use simple, direct language; vary sentence length and structure; have opinions when appropriate; use "I" when it fits; be specific (names, sources, numbers); prefer short words and concrete examples; sound like one person thinking, not a press release.`;
+
+/**
+ * Build the full system prompt for a run: base + bootstrap context + humanizer default + skills section.
  * @param {string} workspaceRoot
  * @param {{ skillsSnapshot?: { prompt: string }, readOnly?: boolean }} opts - Optional pre-built skills snapshot; readOnly = plan mode
  */
 function buildSystemPromptForRun(workspaceRoot, opts = {}) {
   const root = workspaceRoot || ROOT_DEFAULT;
   let system = BASE_SYSTEM_PROMPT;
+  system += HUMANIZER_DEFAULT_PROMPT;
   if (isFirstRun(root)) system += getBootstrapContext(root);
   const snapshot = opts.skillsSnapshot || buildWorkspaceSkillSnapshot(root);
   if (snapshot.prompt) system += '\n\n## Skills\n\n' + snapshot.prompt;

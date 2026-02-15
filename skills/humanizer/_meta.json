@@ -1,0 +1,10 @@
+{
+  "owner": "aether-claw",
+  "slug": "humanizer",
+  "displayName": "Humanizer",
+  "latest": {
+    "version": "2.1.1",
+    "publishedAt": null,
+    "note": "Bundled from https://github.com/blader/humanizer — removes signs of AI-generated writing; applied by default to all agent output."
+  }
+}

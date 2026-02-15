@@ -4,8 +4,9 @@ Skills are **OpenClaw-compatible** directories: each skill is a folder under `sk
 
 ## Bundled by default
 
-Aether-Claw includes two skills in the repo:
+Aether-Claw includes three skills in the repo:
 
+- **humanizer** — Removes signs of AI-generated writing so text sounds natural and human. Based on [blader/humanizer](https://github.com/blader/humanizer) and Wikipedia's "Signs of AI writing." **Applied by default to all agent replies** (writing-style rules are in the system prompt). When the user asks to "humanize" or "rewrite to sound more human," the agent can read `skills/humanizer/SKILL.md` and follow the full guide. No extra deps.
 - **cursor-agent** — Open projects in Cursor/VS Code; run the Cursor CLI for coding tasks (refactor, fix, review). Includes **Cursor CLI install and PATH setup**: use the `cursor_cli_install` tool (action: `instructions` or `install`) when the user needs to fix "agent: command not found" or add the Cursor CLI to PATH. Uses `open_in_editor`, `cursor_agent_run`, and `cursor_cli_install`. No extra deps.
 - **composio-twitter** — X/Twitter research via [Composio](https://composio.dev) (zero X API cost). Optional: requires [Bun](https://bun.sh) and `COMPOSIO_API_KEY`. See `skills/composio-twitter/README.md` for setup.
 
