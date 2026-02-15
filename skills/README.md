@@ -11,6 +11,8 @@ Aether-Claw includes two skills in the repo:
 
 For the full list of **OpenClaw bundled skills** (50+) and how they map to Aether-Claw, see [docs/OPENCLAW_SKILLS_REFERENCE.md](../docs/OPENCLAW_SKILLS_REFERENCE.md).
 
+When you run **`aetherclaw latest`**, OpenClaw skills are synced from GitHub into `skills/` (reserved names `cursor-agent` and `composio-twitter` are never overwritten).
+
 Both are audited and appear in the Skills status during onboarding.
 
 ## Format

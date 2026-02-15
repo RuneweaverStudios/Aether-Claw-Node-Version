@@ -10,6 +10,7 @@
 const path = require('path');
 const { loadConfig } = require('./config');
 const { runAgentLoop } = require('./agent-loop');
+const { classifyComplexity, tierFromScore } = require('./complexity');
 const { getSessionHistory, pushSessionMessage, SESSION_MAIN } = require('./tools');
 const { buildWorkspaceSkillSnapshot } = require('./openclaw-skills');
 const { isFirstRun, getBootstrapContext } = require('./personality');
@@ -92,9 +93,17 @@ function createReplyDispatcher(config = {}) {
       content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
     }));
 
+    let tier = 'action';
+    try {
+      const score = await classifyComplexity(text, cfg);
+      tier = tierFromScore(score, cfg);
+    } catch (_) {
+      // keep default action tier
+    }
+
     try {
       const result = await runAgentLoop(workspaceRoot, text, systemPrompt, cfg, {
-        tier: 'action',
+        tier,
         max_tokens: 4096,
         conversationHistory
       });

@@ -1351,9 +1351,10 @@ async function cmdRalph(maxIterationsArg) {
 
 /**
  * Update install to latest from origin; preserve .env, swarm_config.json, and brain/ (soul, user, personality, etc.).
+ * After npm install, syncs OpenClaw skills from GitHub (50+) into skills/; reserved names (cursor-agent, composio-twitter) are not overwritten.
  * Usage: aetherclaw latest
  */
-function cmdLatest() {
+async function cmdLatest() {
   const gitDir = path.join(ROOT, '.git');
   if (!fs.existsSync(gitDir) || !fs.statSync(gitDir).isDirectory()) {
     console.error(chalk.red('Not a git repo. Run this from a clone (e.g. install via install.sh).'));
@@ -1402,6 +1403,13 @@ function cmdLatest() {
     }
     restoreBrain();
     execSync('npm install', { cwd: ROOT, stdio: 'inherit' });
+    try {
+      const { syncOpenClawSkills } = require('./skills-sync');
+      const copied = await syncOpenClawSkills(ROOT);
+      console.log(chalk.green('  Synced OpenClaw skills (' + copied + ' skills).'));
+    } catch (syncErr) {
+      console.warn(chalk.yellow('  Skills sync skipped: ' + (syncErr.message || syncErr)));
+    }
     console.log(chalk.green('\n✓ Aether-Claw updated to latest. Your .env, config, and brain (soul, user, personality) were left unchanged.\n'));
   } catch (e) {
     if (fs.existsSync(envBackup)) try { fs.copyFileSync(envBackup, envPath); fs.unlinkSync(envBackup); } catch (_) {}

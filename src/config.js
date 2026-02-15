@@ -18,7 +18,12 @@ const DEFAULT_CONFIG = {
       model: 'anthropic/claude-3.5-haiku',
       max_tokens: 2048,
       temperature: 0.5
-    }
+    },
+    complexity_classifier: {
+      enabled: true,
+      model: 'google/gemini-2.5-flash'
+    },
+    complexity_threshold: 4
   },
   brain: { directory: 'brain' },
   safety_gate: { enabled: true },
@@ -32,7 +37,11 @@ function loadConfig(configPath) {
   const dir = configPath || path.join(process.cwd(), 'swarm_config.json');
   try {
     const raw = fs.readFileSync(dir, 'utf8');
-    return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+    const merged = { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+    merged.model_routing = { ...DEFAULT_CONFIG.model_routing, ...(merged.model_routing || {}) };
+    merged.model_routing.complexity_classifier = { ...DEFAULT_CONFIG.model_routing.complexity_classifier, ...(merged.model_routing.complexity_classifier || {}) };
+    if (merged.model_routing.complexity_threshold == null) merged.model_routing.complexity_threshold = DEFAULT_CONFIG.model_routing.complexity_threshold;
+    return merged;
   } catch (e) {
     return DEFAULT_CONFIG;
   }
