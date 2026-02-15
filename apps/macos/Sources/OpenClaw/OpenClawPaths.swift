@@ -17,6 +17,11 @@ enum OpenClawPaths {
     private static let configPathEnv = ["OPENCLAW_CONFIG_PATH"]
     private static let stateDirEnv = ["OPENCLAW_STATE_DIR"]
 
+    /// When the app is AetherClaw (this bundle), use ~/.aetherclaw so we don't share config with an existing OpenClaw install (~/.openclaw).
+    private static var isAetherClawApp: Bool {
+        (Bundle.main.infoDictionary?["CFBundleName"] as? String) == "AetherClaw"
+    }
+
     static var stateDirURL: URL {
         for key in self.stateDirEnv {
             if let override = OpenClawEnv.path(key) {
@@ -24,6 +29,9 @@ enum OpenClawPaths {
             }
         }
         let home = FileManager().homeDirectoryForCurrentUser
+        if self.isAetherClawApp {
+            return home.appendingPathComponent(".aetherclaw", isDirectory: true)
+        }
         return home.appendingPathComponent(".openclaw", isDirectory: true)
     }
 

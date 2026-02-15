@@ -233,8 +233,7 @@ enum OpenClawOAuthStore {
             let expanded = NSString(string: override).expandingTildeInPath
             return URL(fileURLWithPath: expanded, isDirectory: true)
         }
-        let home = FileManager().homeDirectoryForCurrentUser
-        return home.appendingPathComponent(".openclaw", isDirectory: true)
+        return OpenClawPaths.stateDirURL
             .appendingPathComponent("credentials", isDirectory: true)
     }
 

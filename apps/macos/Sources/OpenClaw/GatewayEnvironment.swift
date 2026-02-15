@@ -73,17 +73,22 @@ enum GatewayEnvironment {
     private static let logger = Logger(subsystem: "ai.openclaw", category: "gateway.env")
     private static let supportedBindModes: Set<String> = ["loopback", "tailnet", "lan", "auto"]
 
-    /// Gateway port resolution order: env → app config (openclaw.json) → project swarm_config.json → UserDefaults → 18789.
-    /// When the gateway is run from the project (e.g. `aetherclaw gateway`), it uses swarm_config.json; this ensures the app connects to that port.
+    /// Gateway port resolution: env → (when AetherClaw: project swarm_config first) → app config → project swarm_config → UserDefaults → 18789.
+    /// AetherClaw uses its own config dir (~/.aetherclaw) and prefers the project's swarm_config.json so it connects to this repo's gateway, not an existing OpenClaw install.
     static func gatewayPort() -> Int {
         if let raw = ProcessInfo.processInfo.environment["OPENCLAW_GATEWAY_PORT"] {
             let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             if let parsed = Int(trimmed), parsed > 0 { return parsed }
         }
+        let projectRoot = CommandResolver.projectRoot()
+        let isAetherClaw = (Bundle.main.infoDictionary?["CFBundleName"] as? String) == "AetherClaw"
+        if isAetherClaw, let swarmPort = Self.gatewayPortFromSwarmConfig(projectRoot: projectRoot), swarmPort > 0 {
+            return swarmPort
+        }
         if let configPort = OpenClawConfigFile.gatewayPort(), configPort > 0 {
             return configPort
         }
-        if let swarmPort = Self.gatewayPortFromSwarmConfig(projectRoot: CommandResolver.projectRoot()), swarmPort > 0 {
+        if let swarmPort = Self.gatewayPortFromSwarmConfig(projectRoot: projectRoot), swarmPort > 0 {
             return swarmPort
         }
         let stored = UserDefaults.standard.integer(forKey: "gatewayPort")

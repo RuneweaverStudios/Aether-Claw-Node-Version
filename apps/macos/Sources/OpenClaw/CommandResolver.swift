@@ -53,12 +53,34 @@ enum CommandResolver {
         {
             return url
         }
-        let fallback = FileManager().homeDirectoryForCurrentUser
-            .appendingPathComponent("Projects/openclaw")
+        let home = FileManager().homeDirectoryForCurrentUser
+        let isAetherClaw = (Bundle.main.infoDictionary?["CFBundleName"] as? String) == "AetherClaw"
+        if isAetherClaw, let found = Self.findProjectRootWithSwarmConfig(near: home) {
+            return found
+        }
+        let fallback = home.appendingPathComponent("Projects/openclaw")
         if FileManager().fileExists(atPath: fallback.path) {
             return fallback
         }
-        return FileManager().homeDirectoryForCurrentUser
+        return home
+    }
+
+    /// When AetherClaw and no project root set, find a directory that contains swarm_config.json (AetherClaw/newclawnode repo).
+    private static func findProjectRootWithSwarmConfig(near home: URL) -> URL? {
+        let candidates = [
+            home.appendingPathComponent("Desktop/newclawnode"),
+            home.appendingPathComponent("newclawnode"),
+            home.appendingPathComponent("Projects/newclawnode"),
+            home.appendingPathComponent("Desktop/Aether-Claw-Node-Version"),
+            home.appendingPathComponent("Aether-Claw-Node-Version"),
+        ]
+        for dir in candidates {
+            let swarm = dir.appendingPathComponent("swarm_config.json", isDirectory: false)
+            if FileManager().fileExists(atPath: swarm.path) {
+                return dir
+            }
+        }
+        return nil
     }
 
     static func setProjectRoot(_ path: String) {
@@ -101,6 +123,7 @@ enum CommandResolver {
 
     private static func openclawManagedPaths(home: URL) -> [String] {
         let bases = [
+            OpenClawPaths.stateDirURL,
             home.appendingPathComponent(".openclaw"),
         ]
         var paths: [String] = []
