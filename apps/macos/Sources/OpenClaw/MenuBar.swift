@@ -153,8 +153,11 @@ public struct OpenClawApp: App {
         handler.onRightClick = { [self] in
             HoverHUDController.shared.dismiss(reason: "statusItemRightClick")
             WebChatManager.shared.closePanel()
-            self.isMenuPresented = true
-            self.updateStatusHighlight()
+            // Defer so SwiftUI/MenuBarExtraAccess can open the menu after this event.
+            DispatchQueue.main.async {
+                self.isMenuPresented = true
+                self.updateStatusHighlight()
+            }
         }
         handler.onHoverChanged = { [self] inside in
             HoverHUDController.shared.statusItemHoverChanged(
@@ -213,6 +216,11 @@ private final class StatusItemMouseHandlerView: NSView {
     private var tracking: NSTrackingArea?
 
     override func mouseDown(with event: NSEvent) {
+        // Treat Control+click as right-click (macOS secondary click) so menu/settings work.
+        if event.modifierFlags.contains(.control), let onRightClick = onRightClick {
+            onRightClick()
+            return
+        }
         if let onLeftClick {
             onLeftClick()
         } else {

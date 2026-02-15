@@ -93,9 +93,10 @@ final class WebChatManager {
         self.panelController?.close()
     }
 
+    /// Returns a session key for opening the chat UI immediately. Uses cached or stored value so the panel opens without waiting on the gateway (which can timeout when disconnected).
     func preferredSessionKey() async -> String {
         if let cachedPreferredSessionKey { return cachedPreferredSessionKey }
-        let key = await GatewayConnection.shared.mainSessionKey()
+        let key = await MainActor.run { WorkActivityStore.shared.mainSessionKey }
         self.cachedPreferredSessionKey = key
         return key
     }
