@@ -5,9 +5,10 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @StateObject private var gateway = GatewayClient()
     @StateObject private var nodeClient = NodeClient()
-    @AppStorage("gatewayURL") private var gatewayURL = "ws://127.0.0.1:18789"
+    @AppStorage("gatewayURL") private var storedGatewayURL = "ws://127.0.0.1:18789"
     @AppStorage("gatewayToken") private var gatewayToken = ""
     @AppStorage("nodeModeEnabled") private var nodeModeEnabled = false
+    @State private var gatewayURLInput: String = ""
     @State private var selectedTab = 0
     @State private var messageText = ""
     @State private var messages: [ChatMessage] = []
@@ -17,18 +18,29 @@ struct ContentView: View {
     @State private var statusBannerMessage: String?
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            chatView
-                .tabItem { Label("Chat", systemImage: "bubble.left.and.bubble.right") }
-                .tag(0)
-            settingsView
-                .tabItem { Label("Settings", systemImage: "gear") }
-                .tag(1)
+        VStack(spacing: 0) {
+            connectionIndicatorBar
+            TabView(selection: $selectedTab) {
+                chatView
+                    .tabItem { Label("Chat", systemImage: "bubble.left.and.bubble.right") }
+                    .tag(0)
+                settingsView
+                    .tabItem { Label("Settings", systemImage: "gear") }
+                    .tag(1)
+            }
         }
         .onAppear {
-            if gatewayURL.isEmpty { gatewayURL = "ws://127.0.0.1:18789" }
+            applyDetectedGatewayURLIfNeeded()
+            if storedGatewayURL.isEmpty { storedGatewayURL = "ws://127.0.0.1:18789" }
+            if gatewayURLInput.isEmpty { gatewayURLInput = storedGatewayURL }
         }
-        .onChange(of: gateway.isConnected) { _, connected in
+        .onChange(of: storedGatewayURL) { newVal in
+            if gatewayURLInput != newVal { gatewayURLInput = newVal }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .switchToSettingsTab)) { _ in
+            selectedTab = 1
+        }
+        .onChange(of: gateway.isConnected) { connected in
             if connected {
                 loadHistory()
                 fetchStatusBanner()
@@ -36,7 +48,7 @@ struct ContentView: View {
                 statusBannerMessage = nil
             }
         }
-        .onChange(of: gateway.agentIdleSessionKey) { _, sk in
+        .onChange(of: gateway.agentIdleSessionKey) { sk in
             if sk != nil {
                 if !messageQueue.isEmpty && !isAgentBusy {
                     let next = messageQueue.removeFirst()
@@ -45,12 +57,41 @@ struct ContentView: View {
                 gateway.clearAgentIdleSessionKey()
             }
         }
-        .onChange(of: nodeModeEnabled) { _, enabled in
+        .onChange(of: nodeModeEnabled) { enabled in
             if enabled {
-                nodeClient.connect(wsURL: gatewayURL, token: gatewayToken.isEmpty ? nil : gatewayToken)
+                nodeClient.connect(wsURL: storedGatewayURL, token: gatewayToken.isEmpty ? nil : gatewayToken)
             } else {
                 nodeClient.disconnect()
             }
+        }
+    }
+
+    private var connectionIndicatorBar: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(gateway.isConnected ? Color.green : Color.gray)
+                .frame(width: 8, height: 8)
+            Text(gateway.isConnected ? "Gateway: Connected" : "Gateway: Disconnected")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let err = gateway.lastError, !gateway.isConnected {
+                Text("·")
+                    .foregroundStyle(.secondary)
+                Text(err)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color(nsColor: .separatorColor))
+                .frame(height: 1)
         }
     }
 
@@ -131,7 +172,7 @@ struct ContentView: View {
         let userMsg = ChatMessage(role: "user", content: message)
         messages.append(userMsg)
         let assistantId = UUID()
-        var assistantMsg = ChatMessage(id: assistantId, role: "assistant", content: "", steps: [], isStreaming: true)
+        let assistantMsg = ChatMessage(id: assistantId, role: "assistant", content: "", steps: [], isStreaming: true)
         messages.append(assistantMsg)
 
         gateway.sendAgent(message: message, sessionKey: "mac", readOnly: planMode, onChunk: { delta in
@@ -261,14 +302,30 @@ struct ContentView: View {
         NavigationStack {
             Form {
                 Section("Connection") {
-                    TextField("Gateway URL", text: $gatewayURL)
-                        .help("e.g. ws://127.0.0.1:18789")
+                    TextField("Gateway URL", text: $gatewayURLInput, prompt: Text("ws://127.0.0.1:18789"))
+                        .textFieldStyle(.roundedBorder)
+                        .autocorrectionDisabled(true)
+                        .onSubmit { storedGatewayURL = gatewayURLInput }
+                        .onChange(of: gatewayURLInput) { newVal in
+                            storedGatewayURL = newVal
+                        }
+                        .help("e.g. ws://127.0.0.1:18789 — auto-detected from ~/.aether-claw-node/swarm_config.json if present")
+                    if let detected = SwarmConfigDetector.detectGatewayURL(), detected != gatewayURLInput.trimmingCharacters(in: .whitespacesAndNewlines) {
+                        Button("Use detected (\(detected))") {
+                            let url = detected
+                            storedGatewayURL = url
+                            gatewayURLInput = url
+                        }
+                        .buttonStyle(.borderless)
+                    }
                     SecureField("Token (optional)", text: $gatewayToken)
+                        .textFieldStyle(.roundedBorder)
                     if gateway.isConnected {
                         Button("Disconnect") { gateway.disconnect() }
                     } else {
                         Button("Connect") {
-                            gateway.connect(wsURL: gatewayURL, token: gatewayToken.isEmpty ? nil : gatewayToken)
+                            storedGatewayURL = gatewayURLInput
+                            gateway.connect(wsURL: storedGatewayURL, token: gatewayToken.isEmpty ? nil : gatewayToken)
                         }
                     }
                 }
@@ -295,10 +352,21 @@ struct ContentView: View {
             .formStyle(.grouped)
             .frame(minWidth: 350, minHeight: 200)
             .onAppear {
+                applyDetectedGatewayURLIfNeeded()
+                if gatewayURLInput.isEmpty { gatewayURLInput = storedGatewayURL }
                 if nodeModeEnabled && !nodeClient.isConnected {
-                    nodeClient.connect(wsURL: gatewayURL, token: gatewayToken.isEmpty ? nil : gatewayToken)
+                    nodeClient.connect(wsURL: storedGatewayURL, token: gatewayToken.isEmpty ? nil : gatewayToken)
                 }
             }
         }
+    }
+
+    /// If stored URL is default or empty, try to set from swarm_config.json (~/.aether-claw-node or clone).
+    private func applyDetectedGatewayURLIfNeeded() {
+        let current = storedGatewayURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isDefault = current.isEmpty || current == "ws://127.0.0.1:18789"
+        guard isDefault, let detected = SwarmConfigDetector.detectGatewayURL() else { return }
+        storedGatewayURL = detected
+        gatewayURLInput = detected
     }
 }

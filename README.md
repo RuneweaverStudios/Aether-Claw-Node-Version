@@ -46,6 +46,29 @@ Global flags (OpenClaw-style): `-V` / `--version` (print version), `--no-color` 
 | `aetherclaw index [file]` | Reindex brain for memory search |
 | `aetherclaw config get <key>` | Get config value by dot path (e.g. `model_routing.tier_1_reasoning.model`) |
 | `aetherclaw config set <key> <value>` | Set config value (value is JSON or string) |
+| `aetherclaw latest` | Update to latest from repo; **preserves** `.env`, `swarm_config.json`, and `brain/` (soul, user, memory, etc.) |
+
+## Upgrading (preserve config, brain, .env)
+
+If you have an older install (e.g. from before the WebSocket gateway) and want to upgrade while keeping your data:
+
+**If you installed via the install script or from a git clone** (e.g. `~/.aether-claw-node` or your clone has `.git`):
+
+```bash
+aetherclaw latest
+```
+
+This backs up `.env`, `swarm_config.json`, and `brain/` to a temp directory, runs `git fetch` + `git reset --hard origin/main`, restores your files, runs `npm install`, and syncs bundled skills. Your API key, config, and brain (soul, user, memory) are left unchanged. No need to re-run onboarding.
+
+**If your current install is not a git repo** (e.g. you used `npm install -g` from a tarball):
+
+1. Clone the repo fresh:  
+   `git clone https://github.com/RuneweaverStudios/Aether-Claw-Node-Version.git && cd Aether-Claw-Node-Version`
+2. Copy your existing data into the clone:
+   - `.env` → project root
+   - `swarm_config.json` → project root
+   - `brain/` folder → project root (soul.md, user.md, memory, etc.)
+3. Run `npm install` and use this clone (e.g. `node src/cli.js tui` or `npm run latest` then `aetherclaw daemon` from here).
 
 ## Environment
 

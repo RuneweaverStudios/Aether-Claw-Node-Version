@@ -9,8 +9,18 @@ struct AgentStreamCallbacks {
 
 /// WebSocket client for Aether-Claw gateway (connect handshake, RPC, events).
 final class GatewayClient: ObservableObject {
-    @Published var isConnected = false
-    @Published var lastError: String?
+    @Published var isConnected = false {
+        didSet {
+            GatewayConnectionStatus.isConnected = isConnected
+            DispatchQueue.main.async { NotificationCenter.default.post(name: .gatewayConnectionDidChange, object: nil) }
+        }
+    }
+    @Published var lastError: String? {
+        didSet {
+            GatewayConnectionStatus.lastError = lastError
+            DispatchQueue.main.async { NotificationCenter.default.post(name: .gatewayConnectionDidChange, object: nil) }
+        }
+    }
     @Published var statusBanner: String?  // first_run, missing API key, or nil
     @Published var agentIdleSessionKey: String?  // set when event agent.idle received; client clears after handling
 
@@ -43,7 +53,7 @@ final class GatewayClient: ObservableObject {
     func disconnect() {
         task?.cancel(with: .goingAway, reason: nil)
         task = nil
-        isConnected = false
+        isConnected = false  // didSet updates GatewayConnectionStatus
     }
 
     func clearAgentIdleSessionKey() {
