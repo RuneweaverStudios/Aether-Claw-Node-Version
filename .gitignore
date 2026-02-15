@@ -5,3 +5,5 @@ brain/brain_index.json
 brain/brain_index.db
 .DS_Store
 Thumbs.db
+.cursor/
+apps/macos/.build/

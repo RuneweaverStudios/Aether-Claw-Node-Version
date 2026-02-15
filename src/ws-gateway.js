@@ -13,15 +13,18 @@ const { runAgentLoop, runAgentLoopStream } = require('./agent-loop');
 const { getSessionHistory, pushSessionMessage, setSessionHistory } = require('./tools');
 const { classifyComplexity, tierFromScore } = require('./complexity');
 const nodeRegistry = require('./node-registry');
+const { buildHelloOk, normalizeParams } = require('./openclaw-protocol');
 
 const ROOT_DEFAULT = path.resolve(__dirname, '..');
 const PROTOCOL_VERSION = 3;
+const serverStartMs = Date.now();
 
 /** @type {Map<string, { role: string, scopes?: string[], connectedAt: number }>} */
 const connections = new Map();
 /** @type {Map<string, boolean>} sessionKey -> run in progress (for server-side queue) */
 const runsInProgress = new Map();
 let connectionIdSeq = 0;
+let eventSeq = 0;
 let tickIntervalMs = 15000;
 
 function nextConnectionId() {
@@ -152,11 +155,14 @@ function createWsGateway(opts = {}) {
           });
         }
         handshaken = true;
-        sendRes(ws, msg.id, true, {
-          type: 'hello-ok',
-          protocol: PROTOCOL_VERSION,
-          policy: { tickIntervalMs }
+        const helloOk = buildHelloOk({
+          connections,
+          workspaceRoot,
+          uptimeMs: Date.now() - serverStartMs,
+          tickIntervalMs,
+          mainSessionKey: 'main'
         });
+        sendRes(ws, msg.id, true, helloOk);
         broadcastPresence();
         return;
       }
@@ -168,7 +174,7 @@ function createWsGateway(opts = {}) {
 
       if (msg.type !== 'req' || !msg.id) return;
       const method = msg.method;
-      const params = msg.params || {};
+      const params = normalizeParams(msg.params || {});
 
       switch (method) {
         case 'health': {
@@ -334,6 +340,80 @@ function createWsGateway(opts = {}) {
           }
           break;
         }
+        // OpenClaw protocol: sessions
+        case 'sessions.list': {
+          const limit = Math.min(100, Math.max(1, Number(params.limit) || 50));
+          const sessions = [
+            { key: 'main', label: 'Main', lastActivityAt: Date.now(), agentId: null },
+            { key: 'mac', label: 'Mac', lastActivityAt: Date.now(), agentId: null },
+            { key: 'dashboard', label: 'Dashboard', lastActivityAt: Date.now(), agentId: null }
+          ];
+          sendRes(ws, msg.id, true, { sessions: sessions.slice(0, limit) });
+          break;
+        }
+        case 'sessions.resolve': {
+          const key = params.key || params.sessionId || 'main';
+          sendRes(ws, msg.id, true, { key, sessionKey: key });
+          break;
+        }
+        case 'sessions.patch': {
+          sendRes(ws, msg.id, true, {});
+          break;
+        }
+        case 'sessions.preview':
+        case 'sessions.usage': {
+          sendRes(ws, msg.id, true, {});
+          break;
+        }
+        // OpenClaw protocol: config
+        case 'config.get': {
+          try {
+            const fs = require('fs');
+            const configPath = path.join(workspaceRoot, 'swarm_config.json');
+            let raw = '{}';
+            try {
+              raw = fs.readFileSync(configPath, 'utf8');
+            } catch (_) {}
+            sendRes(ws, msg.id, true, {
+              raw,
+              path: configPath,
+              mainSessionKey: 'main'
+            });
+          } catch (e) {
+            sendRes(ws, msg.id, false, { error: e.message || String(e) });
+          }
+          break;
+        }
+        // OpenClaw protocol: node pairing (stub)
+        case 'node.pair.list': {
+          sendRes(ws, msg.id, true, { requests: [] });
+          break;
+        }
+        // OpenClaw protocol: usage (stub)
+        case 'usage.status':
+        case 'usage.cost': {
+          sendRes(ws, msg.id, true, { ts: Date.now() });
+          break;
+        }
+        // OpenClaw ControlChannel stubs
+        case 'last-heartbeat': {
+          sendRes(ws, msg.id, true, { ts: Date.now(), status: 'ok' });
+          break;
+        }
+        case 'system-event': {
+          sendRes(ws, msg.id, true, {});
+          break;
+        }
+        case 'system-presence': {
+          const presence = Array.from(connections.entries()).map(([id, c]) => ({
+            id: id,
+            role: c.role,
+            scopes: c.scopes,
+            connectedAt: c.connectedAt
+          }));
+          sendRes(ws, msg.id, true, { connections: presence });
+          break;
+        }
         default:
           sendRes(ws, msg.id, false, { error: 'Unknown method: ' + method });
       }
@@ -367,7 +447,8 @@ function createWsGateway(opts = {}) {
 
   function sendEvent(ws, event, payload) {
     if (ws.readyState !== 1) return;
-    ws.send(JSON.stringify({ type: 'event', event, payload }));
+    const seq = ++eventSeq;
+    ws.send(JSON.stringify({ type: 'event', event, payload, seq }));
   }
 
   function broadcastPresence() {

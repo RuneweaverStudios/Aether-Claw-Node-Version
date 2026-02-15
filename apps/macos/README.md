@@ -1,62 +1,64 @@
-# Aether-Claw macOS Companion App
+# OpenClaw macOS app (dev + signing)
 
-Swift/SwiftUI app that connects to the Aether-Claw Node gateway over WebSocket as an **operator** (chat, status, agent). Optionally can act as a **node** (system.run, system.notify, canvas) with permissions and Exec approvals (see Phase 6b).
-
-## Build and run
-
-From this directory:
+## Quick dev run
 
 ```bash
-swift build
-swift run AetherClawMac
+# from repo root
+scripts/restart-mac.sh
 ```
 
-Or open in Xcode and run the `AetherClawMac` scheme (File → Open → select this directory; the Swift Package will be loaded).
+Options:
 
-## App structure
+```bash
+scripts/restart-mac.sh --no-sign   # fastest dev; ad-hoc signing (TCC permissions do not stick)
+scripts/restart-mac.sh --sign      # force code signing (requires cert)
+```
 
-- **Connection**: WebSocket to gateway; first frame is `connect` with `role: "operator"`, optional `auth.token`. Shows Connected/Disconnected and last error.
-- **Node mode**: Settings → Enable node. Opens a second WebSocket to the same gateway with `role: "node"`, `commands: ["system.run", "system.notify", "canvas.navigate"]`, and `permissions` from PermissionsProvider. When the agent uses the `nodes` tool to invoke `system.run`, the app shows an approval dialog (Allow once / Always allow / Deny) and runs the command via `/bin/zsh -c`; for `system.notify` it delivers a local macOS notification.
-- **Settings**: Gateway URL (default `ws://127.0.0.1:18789`), token (optional), Connect/Disconnect; Node toggle; Permissions (TCC) and Exec approvals.
-- **Chat**: Message list with streaming, code blocks (copy), collapsible long messages, steps, queue, load/save, Plan mode, and status banner.
+## Packaging flow
 
-## Gateway parity
+```bash
+scripts/package-mac-app.sh
+```
 
-The daemon provides:
+Creates `dist/OpenClaw.app` and signs it via `scripts/codesign-mac-app.sh`.
 
-- **WebSocket gateway** on `ws://127.0.0.1:18789` (configurable via `gateway.port` in `swarm_config.json`)
-- **Connect handshake**: first frame must be `connect` with `role: "operator"` or `role: "node"`, optional `auth.token` (matches `AETHERCLAW_GATEWAY_TOKEN` or `gateway.auth.token`)
-- **RPC**: `health`, `status`, `chat.send`, `chat.history`, `agent` (with `params.stream: true` for streaming), `chat.export`, `chat.replace`, `node.list`, `node.invoke`
-- **Events**: `presence`, `tick`, `agent.chunk`, `agent.step`, `agent`
-- **HTTP dashboard** and **Web Chat** on the same port when `gateway.dashboard` is true
+## Signing behavior
 
-## Protocol summary
+Auto-selects identity (first match):
+1) Developer ID Application
+2) Apple Distribution
+3) Apple Development
+4) first available identity
 
-- **Frames**: JSON text. `{ type: "req", id, method, params }` → `{ type: "res", id, ok, payload|error }`; server push: `{ type: "event", event, payload }`.
-- **Connect (operator)**:
-  ```json
-  { "type": "req", "id": "<id>", "method": "connect", "params": { "role": "operator", "scopes": ["operator.read","operator.write"], "auth": { "token": "<optional>" } } }
-  ```
-- **Connect (node)**:
-  ```json
-  { "type": "req", "id": "<id>", "method": "connect", "params": { "role": "node", "caps": ["camera","canvas","screen"], "commands": ["system.run","system.notify","canvas.navigate"], "auth": { "token": "<optional>" }, "permissions": { "screenRecording": true, ... } } }
-  ```
-- **Node invoke**: Gateway sends to node `{ type: "invoke", id, command, params }`; node replies `{ type: "invoke_res", id, ok, result?, error? }`.
+If none found:
+- errors by default
+- set `ALLOW_ADHOC_SIGNING=1` or `SIGN_IDENTITY="-"` to ad-hoc sign
 
-## Permissions & Exec approvals (Phase 6b)
+## Team ID audit (Sparkle mismatch guard)
 
-- **Permissions**: Settings → Permissions (TCC). One row per permission (Accessibility, Screen Recording, Microphone, Speech Recognition, Automation, Notifications). Each has an “Open Settings” button that opens the correct System Settings pane (`x-apple.systempreferences:com.apple.preference.security?Privacy_*`). Accessibility status is shown when detectable.
-- **Exec approvals**: Settings → Exec approvals. Default behavior: **Deny** / **Ask on miss** / **Allowlist only** / **Full**; Ask: **Off** / **On miss** / **Always**. Allowlist (glob patterns) stored in `~/.aetherclaw/exec-approvals.json`. When connecting as a **node**, the app will send a `permissions` map in `connect.params` (from `PermissionsProvider.currentPermissions()`); when the gateway sends `node.invoke` for `system.run`, the app can show a native approval dialog (Allow once / Always allow / Deny) and persist “Always allow” to the allowlist.
-- **Stable permissions**: For permissions to persist across updates, sign with a **real Apple Development or Developer ID certificate** (not ad-hoc), use a **fixed bundle ID** (e.g. `com.aetherclaw.mac`), and run from a **fixed path**. Ad-hoc builds get a new identity each build and macOS may forget TCC grants.
-- **Recovery**: If prompts disappear or grants don’t stick: restart macOS; in Terminal run `tccutil reset All com.aetherclaw.mac` (use your app’s bundle ID); remove the app from System Settings → Privacy & Security; relaunch. The app’s Permissions screen also shows this under Recovery.
+After signing, we read the app bundle Team ID and compare every Mach-O inside the app.
+If any embedded binary has a different Team ID, signing fails.
 
-## Chat UX (Phase 7)
+Skip the audit:
+```bash
+SKIP_TEAM_ID_CHECK=1 scripts/package-mac-app.sh
+```
 
-- **Message list**: User and assistant bubbles; assistant shows model name and steps.
-- **Streaming**: Agent runs with `stream: true`; chunks append to the current assistant bubble until completion.
-- **Code blocks**: Rendered with a Copy button (copies to clipboard).
-- **Collapsible**: Long assistant messages get a max height and “Show more” / “Show less”.
-- **Steps**: `event:agent.step` updates the current run’s steps (tool_call / tool_result).
-- **Queue**: While a run is in progress, Send enqueues; when the run completes, the next queued message is sent; “N queued” is shown.
-- **Load / Save**: Save calls `chat.export` and writes JSON to a file; Load opens a file, parses JSON, replaces the thread and calls `chat.replace`.
-- **Banners**: On connect, `status` is fetched; if `first_run` or `error`, a banner is shown (e.g. “Complete setup: run aetherclaw onboard”).
+## Library validation workaround (dev only)
+
+If Sparkle Team ID mismatch blocks loading (common with Apple Development certs), opt in:
+
+```bash
+DISABLE_LIBRARY_VALIDATION=1 scripts/package-mac-app.sh
+```
+
+This adds `com.apple.security.cs.disable-library-validation` to app entitlements.
+Use for local dev only; keep off for release builds.
+
+## Useful env flags
+
+- `SIGN_IDENTITY="Apple Development: Your Name (TEAMID)"`
+- `ALLOW_ADHOC_SIGNING=1` (ad-hoc, TCC permissions do not persist)
+- `CODESIGN_TIMESTAMP=off` (offline debug)
+- `DISABLE_LIBRARY_VALIDATION=1` (dev-only Sparkle workaround)
+- `SKIP_TEAM_ID_CHECK=1` (bypass audit)
