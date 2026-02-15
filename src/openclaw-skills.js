@@ -219,6 +219,68 @@ function buildSystemPromptWithSkills(basePrompt, workspaceRoot) {
   return basePrompt + '\n\n## Skills\n\n' + skillsBlock;
 }
 
+/**
+ * Check if a binary is on PATH (for doctor requirement checks).
+ */
+function isBinOnPath(bin) {
+  const { execSync } = require('child_process');
+  const check = process.platform === 'win32' ? (b) => `where ${b}` : (b) => `command -v ${b}`;
+  try {
+    execSync(check(bin), { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
+ * Return missing requirements per skill (for doctor). Only includes skills that declare requires and have at least one missing.
+ * @param {string} workspaceRoot
+ * @returns {{ skillId: string, skillName: string, missingBins: string[], missingEnv: string[] }[]}
+ */
+function getSkillRequirementsGaps(workspaceRoot) {
+  const root = workspaceRoot || path.resolve(__dirname, '..');
+  const discovered = discoverSkillDirs(root);
+  const gaps = [];
+
+  for (const { dir, name, skillMd } of discovered) {
+    let content;
+    try {
+      content = fs.readFileSync(skillMd, 'utf8');
+    } catch (_) {
+      continue;
+    }
+    const parsed = parseSkillMd(content);
+    const req = parsed.metadata?.openclaw?.requires;
+    if (!req) continue;
+
+    const missingBins = [];
+    const missingEnv = [];
+
+    if (req.bins && Array.isArray(req.bins)) {
+      for (const bin of req.bins) {
+        if (!isBinOnPath(bin)) missingBins.push(bin);
+      }
+    }
+    if (req.env && Array.isArray(req.env)) {
+      for (const key of req.env) {
+        const k = String(key).replace(/^["']|["']$/g, '');
+        if (!process.env[k]) missingEnv.push(k);
+      }
+    }
+
+    if (missingBins.length || missingEnv.length) {
+      gaps.push({
+        skillId: name,
+        skillName: parsed.name || name,
+        missingBins,
+        missingEnv
+      });
+    }
+  }
+  return gaps;
+}
+
 module.exports = {
   discoverSkillDirs,
   listEligibleSkills,
@@ -227,5 +289,7 @@ module.exports = {
   buildWorkspaceSkillSnapshot,
   buildSystemPromptWithSkills,
   parseSkillMd,
-  passesGating
+  passesGating,
+  getSkillRequirementsGaps,
+  isBinOnPath
 };

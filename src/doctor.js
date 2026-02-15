@@ -8,7 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const { loadConfig } = require('./config');
 const { readIndex } = require('./brain');
-const { listAllSkillsWithAuditStatus, listEligibleSkills } = require('./openclaw-skills');
+const { listAllSkillsWithAuditStatus, listEligibleSkills, getSkillRequirementsGaps, discoverSkillDirs, parseSkillMd } = require('./openclaw-skills');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -124,6 +124,63 @@ function runChecks() {
     results.push(check('Canvas (Playwright)', true, 'Installed (use canvas tool to open URLs)'));
   } catch (e) {
     results.push(check('Canvas (Playwright)', false, 'Not installed', 'From repo: npm install playwright && npx playwright install chromium. For global install: npm install -g . from repo (installs optional deps).'));
+  }
+
+  // Skill requirements (metadata.openclaw.requires.bins / .env)
+  try {
+    const gaps = getSkillRequirementsGaps(ROOT);
+    if (gaps.length === 0) {
+      results.push(check('Skill requirements', true, 'All skill requirements satisfied'));
+    } else {
+      const parts = gaps.map((g) => {
+        const m = [];
+        if (g.missingBins.length) m.push('missing bins: ' + g.missingBins.join(', '));
+        if (g.missingEnv.length) m.push('missing env: ' + g.missingEnv.join(', '));
+        return g.skillName + ' (' + m.join('; ') + ')';
+      });
+      results.push(check('Skill requirements', false, parts.join('; '), 'Install missing CLIs or set env vars in .env; or remove/disable the skill in skills/.'));
+    }
+  } catch (e) {
+    results.push(check('Skill requirements', true, 'Could not check (optional)'));
+  }
+
+  // Skill tool references (skills mentioning tools that may not exist in Aether-Claw)
+  try {
+    const { TOOL_DEFINITIONS } = require('./tools');
+    const toolNames = new Set((TOOL_DEFINITIONS || []).map((t) => t.function?.name).filter(Boolean));
+    const paramSuffixes = /_(?:id|key|token|path|url|seconds|minutes|limit|count)$/;
+    const discovered = discoverSkillDirs(ROOT);
+    const refs = [];
+    const toolLike = /`([a-z][a-z0-9_]*)`|\*\*([a-z][a-z0-9_]*)\*\*/g;
+    for (const { name, skillMd } of discovered) {
+      let content;
+      try {
+        content = fs.readFileSync(skillMd, 'utf8');
+      } catch (_) {
+        continue;
+      }
+      const parsed = parseSkillMd(content);
+      const body = (parsed.body || '').toLowerCase();
+      let match;
+      const mentioned = new Set();
+      while ((match = toolLike.exec(body)) !== null) {
+        const word = (match[1] || match[2] || '').toLowerCase();
+        if (word.length > 2 && (word.includes('_') || /^[a-z]+_[a-z]+/.test(word))) mentioned.add(word);
+      }
+      for (const w of mentioned) {
+        if (toolNames.has(w)) continue;
+        if (paramSuffixes.test(w)) continue;
+        refs.push({ skill: parsed.name || name, tool: w });
+      }
+    }
+    if (refs.length === 0) {
+      results.push(check('Skill tool references', true, 'No missing tool references'));
+    } else {
+      const msg = refs.slice(0, 5).map((r) => r.skill + " → '" + r.tool + "'").join('; ') + (refs.length > 5 ? '; ...' : '');
+      results.push(check('Skill tool references', false, msg, 'Some skills may reference tools not implemented in Aether-Claw; use exec or adapt the skill.'));
+    }
+  } catch (e) {
+    results.push(check('Skill tool references', true, 'Could not check (optional)'));
   }
 
   return results;
