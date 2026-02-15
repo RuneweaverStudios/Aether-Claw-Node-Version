@@ -241,7 +241,7 @@ const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'canvas',
-      description: 'Local browser canvas: show HTML/URL, take snapshots, run JS. Actions: present (show url or html), hide (close), navigate (goto url), eval (run JS in page), snapshot (screenshot to path or base64), a2ui_push (set page HTML), a2ui_reset (blank page). Requires optional dependency: npm install playwright.',
+      description: 'Local browser canvas: show HTML/URL, take snapshots, run JS. PREFER this over the browser tool for opening URLs (browser is a stub). Actions: present (show url or html), hide (close), navigate (goto url), eval (run JS in page), snapshot (screenshot to path or base64), a2ui_push (set page HTML), a2ui_reset (blank page). Requires: npm install playwright then npx playwright install chromium. Set AETHERCLAW_CANVAS_CHROME=1 to use system Chrome.',
       parameters: {
         type: 'object',
         properties: {
@@ -423,6 +423,7 @@ const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'file_exists', description: 'Check if path exists and type (file, dir, or none).', parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } } },
   { type: 'function', function: { name: 'open_in_editor', description: 'Open a folder in Cursor or VS Code. Use this when the user asks to open a project in an editor (e.g. "open newclawnode in vscode" or "open that folder in Cursor"). Path can be absolute or start with ~ (e.g. ~/Desktop/newclawnode). Tries Cursor first, then VS Code.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Folder path: absolute, or ~/Desktop/foldername, or relative to project root' } }, required: ['path'] } } },
   { type: 'function', function: { name: 'cursor_agent_run', description: 'Run the Cursor CLI agent in non-interactive mode on a project. Use when the user wants Cursor to perform a coding task (refactor, fix bug, review, generate commit message, etc.) in a folder. Runs "agent -p \'<prompt>\' --output-format text" with optional --force. Requires Cursor CLI (agent) on PATH. If run hangs, the CLI may need a TTY (suggest tmux in that case).', parameters: { type: 'object', properties: { prompt: { type: 'string', description: 'Task for the Cursor agent (e.g. "Refactor src/utils.js for readability", "Fix the bug in api.js")' }, workdir: { type: 'string', description: 'Project directory relative to workspace root (default: .)' }, timeout_seconds: { type: 'number', description: 'Max seconds to wait (default 180)' }, force: { type: 'boolean', description: 'If true, pass --force to auto-apply changes without confirmation' } }, required: ['prompt'] } } },
+  { type: 'function', function: { name: 'cursor_cli_install', description: 'Get Cursor CLI install instructions and add-to-PATH steps, or run the installer. Use when the user asks to install the Cursor CLI, fix "agent: command not found", or put the Cursor agent on PATH. Action: instructions (return install + PATH steps) or install (run official installer, then return PATH steps for current shell).', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['instructions', 'install'], description: 'instructions = return text only; install = run curl installer then return PATH steps' } }, required: ['action'] } } },
   { type: 'function', function: { name: 'memory_append', description: 'Append text to a brain file (e.g. memory.md) so the agent can remember.', parameters: { type: 'object', properties: { file: { type: 'string', description: 'Brain file name (default memory.md)' }, content: { type: 'string' } }, required: ['content'] } } },
   { type: 'function', function: { name: 'memory_index', description: 'Reindex brain so new content is searchable.', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'audit_tail', description: 'Read last N entries from the audit log.', parameters: { type: 'object', properties: { limit: { type: 'number', description: 'Max entries (default 20)' } } } } },
@@ -748,16 +749,25 @@ async function ensureCanvas(workspaceRoot) {
   try {
     playwright = require('playwright');
   } catch (e) {
-    return { error: 'Canvas requires Playwright. Install with: npm install playwright (or npm run install:global from repo).' };
+    return { error: 'Canvas requires Playwright. Install with: npm install playwright then npx playwright install chromium. From repo: npm run install:global to install globally with optional deps.' };
+  }
+  const useChrome = process.env.AETHERCLAW_CANVAS_CHROME === '1' || process.env.AETHERCLAW_CANVAS_CHROME === 'true';
+  const launchOpts = {
+    headless: process.env.CI === 'true' || process.env.AETHERCLAW_CANVAS_HEADLESS === '1'
+  };
+  if (useChrome) {
+    launchOpts.channel = 'chrome';
   }
   try {
-    canvasBrowser = await playwright.chromium.launch({
-      headless: process.env.CI === 'true' || process.env.AETHERCLAW_CANVAS_HEADLESS === '1'
-    });
+    canvasBrowser = await playwright.chromium.launch(launchOpts);
     canvasPage = await canvasBrowser.newPage();
     return null;
   } catch (e) {
-    return { error: 'Canvas launch failed: ' + (e.message || String(e)) };
+    const msg = e.message || String(e);
+    const hint = msg.includes('Executable doesn\'t exist') || msg.includes('browserType.launch')
+      ? ' Run: npx playwright install chromium (or for system Chrome set AETHERCLAW_CANVAS_CHROME=1).'
+      : '';
+    return { error: 'Canvas launch failed: ' + msg + hint };
   }
 }
 
@@ -1135,56 +1145,124 @@ function shellEscapeSingleQuoted(s) {
   return "'" + String(s).replace(/'/g, "'\\''") + "'";
 }
 
+/** Return the first Cursor CLI binary found on PATH, or null. Avoids running a command that doesn't exist. */
+function whichAgent() {
+  const bins = ['agent', 'cursor-agent'];
+  const check = process.platform === 'win32' ? (b) => `where ${b}` : (b) => `command -v ${b} || which ${b}`;
+  for (const bin of bins) {
+    try {
+      execSync(check(bin), { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+      return bin;
+    } catch (_) {}
+  }
+  return null;
+}
+
 function runCursorAgentRun(workspaceRoot, args, context) {
   const perm = checkPermission(ActionCategory.SYSTEM_COMMAND, null, workspaceRoot || ROOT_DEFAULT);
   if (!perm.allowed) return { error: 'Permission denied: ' + (perm.confirmation_message || 'system_command') };
   const root = workspaceRoot || ROOT_DEFAULT;
   const workdir = args.workdir ? resolvePath(root, args.workdir) : root;
-  const timeoutSeconds = Math.min(600, Math.max(30, args.timeout_seconds || 180));
   const prompt = (args.prompt || '').trim();
   if (!prompt) return { error: 'prompt is required' };
+
+  const bin = whichAgent();
+  if (!bin) {
+    return {
+      error: 'Cursor CLI (agent) not found on PATH.',
+      hint: 'Install with: curl https://cursor.com/install -fsS | bash ; then run "agent login". To work in Cursor without the CLI, use the open_in_editor tool with path: ' + workdir,
+      workdir,
+      suggest_open_in_editor: true
+    };
+  }
+
+  const timeoutSeconds = Math.min(600, Math.max(30, args.timeout_seconds || 180));
   const forceFlag = args.force === true ? ' --force' : '';
   const agentCmd = shellEscapeSingleQuoted(prompt);
-  const buildCmd = (bin) => `${bin} -p ${agentCmd} --output-format text${forceFlag}`;
-  const tryRun = (bin) => {
+  const buildCmd = (b) => `${b} -p ${agentCmd} --output-format text${forceFlag}`;
+  let out;
+  try {
+    out = execSync(buildCmd(bin), {
+      cwd: workdir,
+      encoding: 'utf8',
+      timeout: timeoutSeconds * 1000,
+      maxBuffer: 4 * 1024 * 1024
+    });
+    return { stdout: (out || '').trim(), stderr: '', exitCode: 0, workdir };
+  } catch (err) {
+    const e = err;
+    const stdout = e.stdout != null ? String(e.stdout) : '';
+    const stderr = e.stderr != null ? String(e.stderr) : '';
+    const timedOut = e.killed === true || (e.message && e.message.includes('ETIMEDOUT'));
+    const error = timedOut
+      ? 'Cursor agent run timed out or hung.'
+      : (e.message || String(e));
+    const hint = timedOut
+      ? 'The Cursor CLI often requires a real TTY when run from scripts. Try running in a terminal with tmux, or use open_in_editor to open the project in Cursor and run the task there.'
+      : undefined;
+    return {
+      stdout: stdout.trim(),
+      stderr: stderr.trim(),
+      exitCode: e.status ?? -1,
+      error,
+      hint: hint || undefined
+    };
+  }
+}
+
+const CURSOR_CLI_INSTRUCTIONS = `Install Cursor CLI (adds \`agent\` to PATH):
+
+1. Run the official installer:
+   curl https://cursor.com/install -fsS | bash
+
+2. Add ~/.local/bin to your PATH (installer puts \`agent\` there):
+
+   For zsh (default on macOS):
+   echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+   source ~/.zshrc
+
+   For bash:
+   echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+   source ~/.bashrc
+
+3. In a new terminal (or after sourcing): agent --version
+4. Log in once: agent login
+
+Then cursor_agent_run will work.`;
+
+function runCursorCliInstall(workspaceRoot, args, context) {
+  const perm = checkPermission(ActionCategory.SYSTEM_COMMAND, null, workspaceRoot || ROOT_DEFAULT);
+  if (!perm.allowed) return { error: 'Permission denied: system_command' };
+  const action = (args.action || 'instructions').toLowerCase();
+  if (action === 'instructions') {
+    return { ok: true, instructions: CURSOR_CLI_INSTRUCTIONS, path_add: 'export PATH="$HOME/.local/bin:$PATH"' };
+  }
+  if (action === 'install') {
     try {
-      return execSync(buildCmd(bin), {
-        cwd: workdir,
-        encoding: 'utf8',
-        timeout: timeoutSeconds * 1000,
-        maxBuffer: 4 * 1024 * 1024
+      execSync('curl https://cursor.com/install -fsS | bash', {
+        stdio: 'inherit',
+        timeout: 120000,
+        shell: true
       });
-    } catch (err) {
-      return { err };
+      const pathAdd = process.platform === 'win32'
+        ? 'set PATH=%USERPROFILE%\\.local\\bin;%PATH%'
+        : 'export PATH="$HOME/.local/bin:$PATH"';
+      const shellRc = process.env.SHELL && process.env.SHELL.includes('zsh') ? '~/.zshrc' : '~/.bashrc';
+      return {
+        ok: true,
+        message: 'Cursor CLI installed. Add to PATH and reload shell.',
+        path_add: pathAdd,
+        next_step: `Add to ${shellRc}: echo 'export PATH="$HOME/.local/bin:$PATH"' >> ${shellRc} ; source ${shellRc}`,
+        instructions: CURSOR_CLI_INSTRUCTIONS
+      };
+    } catch (e) {
+      return {
+        error: 'Cursor CLI install failed: ' + (e.message || String(e)),
+        instructions: CURSOR_CLI_INSTRUCTIONS
+      };
     }
-  };
-  const out = tryRun('agent');
-  if (typeof out === 'string') return { stdout: out.trim(), stderr: '', exitCode: 0, workdir };
-  if (out.err && (out.err.code === 'ENOENT' || (out.err.message && out.err.message.includes('spawn agent')))) {
-    const out2 = tryRun('cursor-agent');
-    if (typeof out2 === 'string') return { stdout: out2.trim(), stderr: '', exitCode: 0, workdir };
   }
-  const e = out.err;
-  const stdout = e.stdout != null ? String(e.stdout) : '';
-  const stderr = e.stderr != null ? String(e.stderr) : '';
-  const timedOut = e.killed === true || (e.message && e.message.includes('ETIMEDOUT'));
-  const notFound = e.code === 'ENOENT' || (e.message && e.message.includes('spawn agent'));
-  let error = e.message || String(e);
-  let hint = '';
-  if (notFound) {
-    error = 'Cursor CLI (agent) not found on PATH.';
-    hint = 'Install: curl https://cursor.com/install -fsS | bash ; then run "agent login". Or use open_in_editor to open the project in Cursor and work there.';
-  } else if (timedOut) {
-    error = 'Cursor agent run timed out or hung.';
-    hint = 'The Cursor CLI often requires a real TTY when run from scripts. Try running in a terminal with tmux, or use open_in_editor to open the project in Cursor and run the task there.';
-  }
-  return {
-    stdout: stdout.trim(),
-    stderr: stderr.trim(),
-    exitCode: e.status ?? -1,
-    error,
-    hint: hint || undefined
-  };
+  return { error: 'Unknown action: use instructions or install' };
 }
 
 function runMemoryAppend(workspaceRoot, args, context) {
@@ -1627,6 +1705,8 @@ async function runTool(workspaceRoot, toolName, args, context = {}) {
       return runOpenInEditor(root, args, ctx);
     case 'cursor_agent_run':
       return runCursorAgentRun(root, args, ctx);
+    case 'cursor_cli_install':
+      return runCursorCliInstall(root, args, ctx);
     case 'memory_append':
       return runMemoryAppend(root, args, ctx);
     case 'memory_index':

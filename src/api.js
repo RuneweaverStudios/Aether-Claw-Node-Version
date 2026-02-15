@@ -42,6 +42,27 @@ function resolveModelAndMaxTokens(tier, config, modelOverride, maxTokensOverride
   return { model, max_tokens, fallbacks };
 }
 
+/** Human-readable short name for replies (e.g. "Claude 3.5 Haiku"). */
+function modelIdToDisplayName(modelId) {
+  if (!modelId || typeof modelId !== 'string') return 'Unknown';
+  const s = modelId.split('/').pop() || modelId;
+  const map = {
+    'claude-3.5-haiku': 'Claude 3.5 Haiku',
+    'claude-3.7-sonnet': 'Claude 3.7 Sonnet',
+    'claude-opus-4.6': 'Claude Opus 4.6',
+    'gemini-2.5-flash': 'Gemini 2.5 Flash',
+    'gemini-2.5-pro': 'Gemini 2.5 Pro',
+    'gpt-4.1': 'GPT-4.1',
+    'glm-5': 'GLM 5',
+    'kimi-k2.5': 'Kimi K2.5',
+    'deepseek-chat-v4': 'DeepSeek V4'
+  };
+  for (const [k, v] of Object.entries(map)) {
+    if (s.includes(k)) return v;
+  }
+  return s.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 /**
  * Call OpenRouter LLM. On failure, tries fallback model(s) if configured (model_routing.tier_*.fallback).
  * @param {Object} opts - prompt, systemPrompt, model (optional), max_tokens (optional), tier (optional 'reasoning'|'action')
@@ -88,4 +109,4 @@ async function callLLM(opts, config = null) {
   throw lastError || new Error('No response');
 }
 
-module.exports = { callLLM, resolveModelAndMaxTokens, stripToolCallLeakage };
+module.exports = { callLLM, resolveModelAndMaxTokens, stripToolCallLeakage, modelIdToDisplayName };

@@ -19,6 +19,9 @@ const ROOT_DEFAULT = path.resolve(__dirname, '..');
 /** Base system prompt: one agent with full tools; no intent-based branching. */
 const BASE_SYSTEM_PROMPT = `You are Aether-Claw, a secure AI assistant with access to tools (read_file, write_file, edit, exec, process, create_directory, memory_search, memory_get, web_search, web_fetch, github_connect, and others). Use tools when needed to fulfill the user's request. If the user asks to connect GitHub or whether Aether-Claw is connected to GitHub, use the github_connect tool (action: check or login) and share the result or instructions. To create a folder (e.g. on Desktop) use create_directory with path like ~/Desktop/foldername, or exec with mkdir -p. Only use tools from your tool list; never output raw function-call or tool syntax in your message. Reply in natural language and markdown.
 
+## Model and responses
+You run on a model chosen for this session (cheap/fast by default for most tasks; a more capable model may be used for complex or deep work). The system will prefix your reply with the model name in parentheses (e.g. (Claude 3.5 Haiku)); you do not need to repeat it. When a task clearly requires deep reasoning, debugging, or multi-step planning, say briefly that you are using or would recommend a more expensive/capable model—e.g. "Using a more capable model for this." or "For deeper troubleshooting, a stronger model would help."
+
 ## Brain and identity
 Your identity and configuration live in the brain/ directory. When the user asks to see your soul, identity, config, or brain, use read_file on the relevant file and share or summarize it.
 - brain/soul.md — your goals, how to behave, what matters ("show my soul", "soul.md", "your soul")
@@ -98,7 +101,7 @@ function createReplyDispatcher(config = {}) {
       const replyText = result.error && !result.reply ? result.error : (result.reply || '');
       pushSessionMessage(key, 'user', text);
       pushSessionMessage(key, 'assistant', replyText);
-      return { reply: replyText, error: result.error, toolCallsCount: result.toolCallsCount };
+      return { reply: replyText, error: result.error, toolCallsCount: result.toolCallsCount, modelUsed: result.modelUsed };
     } catch (e) {
       const errMsg = e.message || String(e);
       pushSessionMessage(key, 'user', text);

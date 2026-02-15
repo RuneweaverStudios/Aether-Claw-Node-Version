@@ -6,8 +6,10 @@ Skills are **OpenClaw-compatible** directories: each skill is a folder under `sk
 
 Aether-Claw includes two skills in the repo:
 
-- **cursor-agent** — Open projects in Cursor/VS Code; run the Cursor CLI for coding tasks (refactor, fix, review). Uses `open_in_editor` and `cursor_agent_run` tools. No extra deps.
+- **cursor-agent** — Open projects in Cursor/VS Code; run the Cursor CLI for coding tasks (refactor, fix, review). Includes **Cursor CLI install and PATH setup**: use the `cursor_cli_install` tool (action: `instructions` or `install`) when the user needs to fix "agent: command not found" or add the Cursor CLI to PATH. Uses `open_in_editor`, `cursor_agent_run`, and `cursor_cli_install`. No extra deps.
 - **composio-twitter** — X/Twitter research via [Composio](https://composio.dev) (zero X API cost). Optional: requires [Bun](https://bun.sh) and `COMPOSIO_API_KEY`. See `skills/composio-twitter/README.md` for setup.
+
+For the full list of **OpenClaw bundled skills** (50+) and how they map to Aether-Claw, see [docs/OPENCLAW_SKILLS_REFERENCE.md](../docs/OPENCLAW_SKILLS_REFERENCE.md).
 
 Both are audited and appear in the Skills status during onboarding.
 

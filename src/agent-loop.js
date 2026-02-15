@@ -6,7 +6,7 @@
 const axios = require('axios');
 const path = require('path');
 const { loadConfig } = require('./config');
-const { resolveModelAndMaxTokens, stripToolCallLeakage } = require('./api');
+const { resolveModelAndMaxTokens, stripToolCallLeakage, modelIdToDisplayName } = require('./api');
 const { TOOL_DEFINITIONS, runTool } = require('./tools');
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
@@ -44,7 +44,7 @@ async function chatWithTools(messages, config, options = {}) {
       const msg = data.choices?.[0]?.message;
       if (!msg) throw new Error(data.error?.message || 'No message in response');
       if (typeof msg.content === 'string') msg.content = stripToolCallLeakage(msg.content);
-      return msg;
+      return { msg, modelUsed: model };
     } catch (e) {
       lastError = e;
       const status = e.response?.status;
@@ -91,16 +91,20 @@ async function runAgentLoop(workspaceRoot, userMessage, systemPrompt, config, op
 
   let iterations = 0;
   let totalToolCalls = 0;
+  let modelUsed = null;
 
   while (iterations < maxIter) {
     iterations++;
     const tier = options.tier || 'action';
-    const msg = await chatWithTools(messages, config, { tier, max_tokens: options.max_tokens });
+    const { msg, modelUsed: used } = await chatWithTools(messages, config, { tier, max_tokens: options.max_tokens });
+    if (used) modelUsed = used;
 
     const toolCalls = msg.tool_calls;
     if (!toolCalls || toolCalls.length === 0) {
       const text = (msg.content && msg.content.trim()) || '';
-      return { reply: text, toolCallsCount: totalToolCalls };
+      const displayName = modelIdToDisplayName(modelUsed);
+      const prefix = displayName ? `(${displayName})\n\n` : '';
+      return { reply: prefix + text, toolCallsCount: totalToolCalls, modelUsed };
     }
 
     totalToolCalls += toolCalls.length;
@@ -130,10 +134,13 @@ async function runAgentLoop(workspaceRoot, userMessage, systemPrompt, config, op
     }
   }
 
+  const displayName = modelIdToDisplayName(modelUsed);
+  const prefix = displayName ? `(${displayName})\n\n` : '';
   return {
-    reply: 'Stopped after maximum tool-call iterations. Consider summarizing what was done so far.',
+    reply: prefix + 'Stopped after maximum tool-call iterations. Consider summarizing what was done so far.',
     toolCallsCount: totalToolCalls,
-    error: 'Max iterations reached'
+    error: 'Max iterations reached',
+    modelUsed
   };
 }
 

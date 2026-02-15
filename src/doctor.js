@@ -118,6 +118,14 @@ function runChecks() {
     results.push(check('Skills', true, 'None or error (optional)'));
   }
 
+  // Canvas (Playwright) – optional; used by canvas tool for browser automation
+  try {
+    require.resolve('playwright');
+    results.push(check('Canvas (Playwright)', true, 'Installed (use canvas tool to open URLs)'));
+  } catch (e) {
+    results.push(check('Canvas (Playwright)', false, 'Not installed', 'From repo: npm install playwright && npx playwright install chromium. For global install: npm install -g . from repo (installs optional deps).'));
+  }
+
   return results;
 }
 

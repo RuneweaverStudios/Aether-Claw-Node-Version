@@ -37,7 +37,12 @@ Use this skill when the user wants to:
 - User specifies a different project (e.g. "run Cursor on ~/Desktop/newclaw") → use **cursor_agent_run** with `prompt` and `workdir` set to that project (relative to workspace if applicable, or ask the user for the path and use a path the tool accepts).
 
 ### When Cursor CLI is not installed
-- If **cursor_agent_run** returns that `agent` was not found, reply with the install hint (install Cursor CLI, then `agent login`) and suggest **open_in_editor** so the user can work in the Cursor app instead.
+- Use the **cursor_cli_install** tool: `action: "instructions"` to return install and PATH steps, or `action: "install"` to run the official installer then return PATH steps. Share the instructions with the user.
+- If **cursor_agent_run** returns that `agent` was not found, call **cursor_cli_install** with `action: "instructions"` (or `"install"` if the user wants to run the installer now), then suggest **open_in_editor** so the user can work in the Cursor app in the meantime.
+- **Cursor CLI PATH install (bundled):**
+  1. Install: `curl https://cursor.com/install -fsS | bash`
+  2. Add to PATH: `export PATH="$HOME/.local/bin:$PATH"` — for zsh add to `~/.zshrc`, for bash to `~/.bashrc`, then `source` the file.
+  3. Reload shell or open a new terminal; run `agent login` once.
 
 ### When run times out
 - If **cursor_agent_run** returns a timeout/hang message, suggest: run the same task in a terminal where Cursor CLI has a TTY, or use tmux for automation, or open the project in Cursor with **open_in_editor** and run the task inside the editor.
@@ -53,3 +58,4 @@ Use this skill when the user wants to:
 |--------------------------|--------------------|-----------------|
 | Open folder in Cursor/VS Code | open_in_editor     | path            |
 | Run Cursor task in project    | cursor_agent_run   | prompt, workdir? |
+| Install Cursor CLI / fix "agent: command not found" / add agent to PATH | cursor_cli_install | action: instructions or install |
