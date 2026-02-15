@@ -20,11 +20,16 @@ REPO_URL="https://github.com/RuneweaverStudios/Aether-Claw-Node-Version.git"
 BRANCH="main"
 INSTALLER_RAW="https://raw.githubusercontent.com/RuneweaverStudios/Aether-Claw-Node-Version/main/install.sh"
 
+# Run Node CLI from install dir (never use PATH 'aetherclaw' — may be Python).
+node_cli() {
+  (cd "$INSTALL_DIR" && node "$INSTALL_DIR/src/cli.js" "$@")
+}
+
 # Ensure OPENROUTER_API_KEY is set in .env; run onboarding interactively if not.
 ensure_onboard() {
   if [ ! -f "$INSTALL_DIR/.env" ] || ! grep -q "OPENROUTER_API_KEY=.\+" "$INSTALL_DIR/.env" 2>/dev/null; then
     printf "\n${CYAN}API key required. Running onboarding (OpenRouter key, model, etc.)...${NC}\n\n"
-    (cd "$INSTALL_DIR" && aetherclaw onboard < /dev/tty)
+    node_cli onboard < /dev/tty
   fi
 }
 
@@ -310,11 +315,11 @@ PLISTEOF
     if [ "$launch_choice" = "1" ]; then
       ensure_onboard
       printf "\n${CYAN}Launching TUI...${NC}\n\n"
-      cd "$INSTALL_DIR" && aetherclaw tui < /dev/tty
+      node_cli tui < /dev/tty
     elif [ "$launch_choice" = "2" ]; then
       ensure_onboard
       printf "\n${CYAN}Launching Web dashboard...${NC}\n\n"
-      cd "$INSTALL_DIR" && aetherclaw dashboard
+      node_cli dashboard
     fi
   fi
   printf "\n"
@@ -421,10 +426,10 @@ if [ -d "$INSTALL_DIR" ]; then
                     if [ -d "$INSTALL_DIR/.git" ] && command -v git &>/dev/null; then
                         git pull --quiet 2>/dev/null || true
                     fi
-                    aetherclaw telegram-setup --yes < /dev/tty
+                    node_cli telegram-setup --yes < /dev/tty
                     exit 0
                 fi
-                printf "  Run later: ${CYAN}aetherclaw telegram-setup${NC}\n\n"
+                printf "  Run later: ${CYAN}node $INSTALL_DIR/src/cli.js telegram-setup${NC}\n\n"
                 gateway_prompt
                 exit 0
                 ;;
@@ -457,9 +462,9 @@ if [ -d "$INSTALL_DIR" ]; then
                 fi
                 start_choice=${start_choice:-2}
                 case "$start_choice" in
-                    1) aetherclaw onboard < /dev/tty ;;
-                    2) ensure_onboard; aetherclaw tui < /dev/tty ;;
-                    *) printf "  Run: ${CYAN}aetherclaw tui${NC}\n\n" ;;
+                    1) node_cli onboard < /dev/tty ;;
+                    2) ensure_onboard; node_cli tui < /dev/tty ;;
+                    *) printf "  Run: ${CYAN}node $INSTALL_DIR/src/cli.js tui${NC}\n\n" ;;
                 esac
                 exit 0
                 ;;
@@ -546,21 +551,21 @@ cd "$INSTALL_DIR"
 case "$choice" in
     1)
         printf "\n${CYAN}Running onboarding...${NC}\n\n"
-        aetherclaw onboard < /dev/tty
+        node_cli onboard < /dev/tty
         ;;
     2)
         ensure_onboard
         printf "\n${CYAN}Launching TUI...${NC}\n\n"
-        aetherclaw tui < /dev/tty
+        node_cli tui < /dev/tty
         ;;
     3)
         printf "\n${YELLOW}Exiting. Run manually:${NC}\n"
-        printf "  aetherclaw onboard   # first-time setup\n"
-        printf "  aetherclaw tui       # chat\n"
-        printf "  aetherclaw latest    # update from repo\n\n"
+        printf "  node $INSTALL_DIR/src/cli.js onboard   # first-time setup\n"
+        printf "  node $INSTALL_DIR/src/cli.js tui       # chat\n"
+        printf "  node $INSTALL_DIR/src/cli.js latest   # update from repo\n\n"
         ;;
     *)
         printf "\n${YELLOW}Invalid choice. Exiting.${NC}\n"
-        printf "  Run: ${CYAN}aetherclaw onboard${NC}\n\n"
+        printf "  Run: ${CYAN}node $INSTALL_DIR/src/cli.js onboard${NC}\n\n"
         ;;
 esac
