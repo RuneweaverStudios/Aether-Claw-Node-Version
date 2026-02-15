@@ -16,8 +16,9 @@ Or open in Xcode and run the `AetherClawMac` scheme (File → Open → select th
 ## App structure
 
 - **Connection**: WebSocket to gateway; first frame is `connect` with `role: "operator"`, optional `auth.token`. Shows Connected/Disconnected and last error.
-- **Settings**: Gateway URL (default `ws://127.0.0.1:18789`), token (optional), Connect/Disconnect; Permissions (TCC) and Exec approvals.
-- **Chat**: Message list with streaming, code blocks (copy), collapsible long messages, steps, queue, load/save, and status banner.
+- **Node mode**: Settings → Enable node. Opens a second WebSocket to the same gateway with `role: "node"`, `commands: ["system.run", "system.notify", "canvas.navigate"]`, and `permissions` from PermissionsProvider. When the agent uses the `nodes` tool to invoke `system.run`, the app shows an approval dialog (Allow once / Always allow / Deny) and runs the command via `/bin/zsh -c`; for `system.notify` it delivers a local macOS notification.
+- **Settings**: Gateway URL (default `ws://127.0.0.1:18789`), token (optional), Connect/Disconnect; Node toggle; Permissions (TCC) and Exec approvals.
+- **Chat**: Message list with streaming, code blocks (copy), collapsible long messages, steps, queue, load/save, Plan mode, and status banner.
 
 ## Gateway parity
 

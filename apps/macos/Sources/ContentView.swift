@@ -4,8 +4,10 @@ import UniformTypeIdentifiers
 
 struct ContentView: View {
     @StateObject private var gateway = GatewayClient()
+    @StateObject private var nodeClient = NodeClient()
     @AppStorage("gatewayURL") private var gatewayURL = "ws://127.0.0.1:18789"
     @AppStorage("gatewayToken") private var gatewayToken = ""
+    @AppStorage("nodeModeEnabled") private var nodeModeEnabled = false
     @State private var selectedTab = 0
     @State private var messageText = ""
     @State private var messages: [ChatMessage] = []
@@ -41,6 +43,13 @@ struct ContentView: View {
                     runAgent(message: next)
                 }
                 gateway.clearAgentIdleSessionKey()
+            }
+        }
+        .onChange(of: nodeModeEnabled) { _, enabled in
+            if enabled {
+                nodeClient.connect(wsURL: gatewayURL, token: gatewayToken.isEmpty ? nil : gatewayToken)
+            } else {
+                nodeClient.disconnect()
             }
         }
     }
@@ -263,6 +272,21 @@ struct ContentView: View {
                         }
                     }
                 }
+                Section("Node") {
+                    Toggle("Enable node (system.run, notifications)", isOn: $nodeModeEnabled)
+                        .help("Connect as a node so the agent can run commands and send notifications on this Mac")
+                    if nodeModeEnabled {
+                        if nodeClient.isConnected {
+                            Text("Node connected")
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                        } else if let err = nodeClient.lastError {
+                            Text(err)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                    }
+                }
                 Section("Permissions & security") {
                     NavigationLink("Permissions (TCC)") { PermissionsView() }
                     NavigationLink("Exec approvals") { ExecApprovalsView() }
@@ -270,6 +294,11 @@ struct ContentView: View {
             }
             .formStyle(.grouped)
             .frame(minWidth: 350, minHeight: 200)
+            .onAppear {
+                if nodeModeEnabled && !nodeClient.isConnected {
+                    nodeClient.connect(wsURL: gatewayURL, token: gatewayToken.isEmpty ? nil : gatewayToken)
+                }
+            }
         }
     }
 }
