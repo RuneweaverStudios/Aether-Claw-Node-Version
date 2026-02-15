@@ -211,4 +211,4 @@ async function setupTelegram(envPath, { question, questionMasked }, options = {}
   }
 }
 
-module.exports = { setupTelegram, verifyBotToken, sendTelegramMessage, sendChatAction };
+module.exports = { setupTelegram, verifyBotToken, sendTelegramMessage, sendChatAction, appendOrReplaceEnv };

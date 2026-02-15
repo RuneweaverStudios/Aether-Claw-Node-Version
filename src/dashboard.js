@@ -389,4 +389,12 @@ const server = http.createServer(async (req, res) => {
 });
 
 const port = Number(process.env.PORT) || 8501;
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${port} is already in use. Dashboard may already be running.`);
+    console.error(`Open http://localhost:${port} in your browser.`);
+    process.exit(0);
+  }
+  throw err;
+});
 server.listen(port, () => console.log(`Dashboard: http://localhost:${port}`));

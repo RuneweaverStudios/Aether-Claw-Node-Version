@@ -15,6 +15,7 @@ const { indexAll } = require('./brain');
 const { sendTelegramMessage, sendChatAction } = require('./telegram-setup');
 const { isFirstRun, getBootstrapFirstMessage } = require('./personality');
 const { createReplyDispatcher, resolveSessionKey } = require('./gateway');
+const { addPending } = require('./pairing');
 
 const ROOT = path.resolve(__dirname, '..');
 const TELEGRAM_API = 'https://api.telegram.org/bot';
@@ -81,7 +82,13 @@ async function runTelegramLoop() {
           if (!msg || !msg.text) continue;
           const chatId = String(msg.chat.id);
           const text = (msg.text || '').trim();
-          if (pairedChatId && chatId !== pairedChatId) continue;
+          const isUnknownChat = !pairedChatId || chatId !== pairedChatId;
+          if (isUnknownChat) {
+            const code = String(Math.floor(100000 + Math.random() * 900000));
+            addPending(ROOT, chatId, code);
+            await sendTelegramMessage(token, chatId, `To pair with Aether-Claw, run in your terminal:\n\n\`aetherclaw pairing approve ${code}\`\n\nYour code: ${code}`);
+            continue;
+          }
           try {
             let out;
             const firstRun = isFirstRun(ROOT);

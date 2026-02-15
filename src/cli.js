@@ -23,7 +23,8 @@ const { runAgentLoop } = require('./agent-loop');
 const { indexAll, getBrainDir, searchMemory, readIndex, indexFile } = require('./brain');
 const { createReplyDispatcher, resolveSessionKey } = require('./gateway');
 const { isFirstRun, isBootstrapActive, hasEstablishedSoul, updateUserProfile, updateSoul, getBootstrapFirstMessage, getBootstrapContext, SCRIPTED_USER_WAKE_UP } = require('./personality');
-const { setupTelegram, sendTelegramMessage, sendChatAction } = require('./telegram-setup');
+const { setupTelegram, sendTelegramMessage, sendChatAction, appendOrReplaceEnv } = require('./telegram-setup');
+const { consumePendingByCode } = require('./pairing');
 const { listAllSkillsWithAuditStatus, listEligibleSkills, discoverSkillDirs } = require('./openclaw-skills');
 const axios = require('axios');
 
@@ -125,6 +126,61 @@ Update these files with what you learn:
 
 When you are done, use the delete_file tool to remove \`brain/BOOTSTRAP.md\` so this ritual only runs once.
 `;
+
+/** Optional skills from official OpenClaw repo (github.com/openclaw/openclaw/tree/main/skills). Install via clawhub install <slug>. */
+const OPTIONAL_SKILLS = [
+  { slug: '1password', description: '1Password CLI integration' },
+  { slug: 'apple-notes', description: 'Apple Notes' },
+  { slug: 'apple-reminders', description: 'Apple Reminders' },
+  { slug: 'bear-notes', description: 'Bear notes app' },
+  { slug: 'blogwatcher', description: 'Blog/RSS watcher' },
+  { slug: 'blucli', description: 'BlueBubbles CLI' },
+  { slug: 'bluebubbles', description: 'iMessage via BlueBubbles' },
+  { slug: 'camsnap', description: 'Camera snapshot' },
+  { slug: 'canvas', description: 'Canvas UI rendering' },
+  { slug: 'clawhub', description: 'ClawHub skill discovery' },
+  { slug: 'coding-agent', description: 'Coding agent (Cursor/IDE)' },
+  { slug: 'discord', description: 'Discord bot/server' },
+  { slug: 'eightctl', description: 'Eight sleep device' },
+  { slug: 'food-order', description: 'Food ordering' },
+  { slug: 'gemini', description: 'Gemini CLI for Q&A and generation' },
+  { slug: 'gifgrep', description: 'GIF search' },
+  { slug: 'github', description: 'GitHub repo and PR management' },
+  { slug: 'gog', description: 'GOG games' },
+  { slug: 'goplaces', description: 'Places/location' },
+  { slug: 'healthcheck', description: 'Health check' },
+  { slug: 'himalaya', description: 'Email (Himalaya CLI)' },
+  { slug: 'imsg', description: 'iMessage (legacy)' },
+  { slug: 'mcporter', description: 'McPorter' },
+  { slug: 'model-usage', description: 'Model usage tracking' },
+  { slug: 'nano-banana-pro', description: 'Image generation/editing (Gemini)' },
+  { slug: 'nano-pdf', description: 'PDF with Gemini' },
+  { slug: 'notion', description: 'Notion notes and databases' },
+  { slug: 'obsidian', description: 'Obsidian notes' },
+  { slug: 'openai-image-gen', description: 'OpenAI image generation' },
+  { slug: 'openai-whisper-api', description: 'OpenAI Whisper API' },
+  { slug: 'openai-whisper', description: 'OpenAI Whisper local' },
+  { slug: 'openhue', description: 'Philips Hue' },
+  { slug: 'oracle', description: 'Oracle DB' },
+  { slug: 'ordercli', description: 'Order CLI' },
+  { slug: 'peekaboo', description: 'macOS UI automation (Peekaboo CLI)' },
+  { slug: 'sag', description: 'SAG agent' },
+  { slug: 'session-logs', description: 'Session logs' },
+  { slug: 'sherpa-onnx-tts', description: 'TTS (Sherpa ONNX)' },
+  { slug: 'skill-creator', description: 'Create new skills' },
+  { slug: 'slack', description: 'Slack team automation' },
+  { slug: 'songsee', description: 'Song identification' },
+  { slug: 'sonoscli', description: 'Sonos speaker control' },
+  { slug: 'spotify-player', description: 'Spotify playback' },
+  { slug: 'summarize', description: 'Summarize URLs/files/YouTube' },
+  { slug: 'things-mac', description: 'Things (macOS)' },
+  { slug: 'tmux', description: 'tmux sessions' },
+  { slug: 'trello', description: 'Trello boards' },
+  { slug: 'video-frames', description: 'Video frame extraction' },
+  { slug: 'voice-call', description: 'Voice calls' },
+  { slug: 'wacli', description: 'WhatsApp CLI' },
+  { slug: 'weather', description: 'Weather' },
+];
 
 function seedBootstrapIfNeeded(root) {
   const brainDir = getBrainDir(root);
@@ -542,12 +598,12 @@ async function cmdOnboard() {
     'More: skills/README.md or clawhub install <slug>'
   ]);
   console.log('│');
-  openclawStep('Configure skills now? (recommended)');
-  const doSkills = (await ttyQuestion('  Yes / No (default: Yes)', 'Yes')).trim().toLowerCase();
-  openclawStepValue(doSkills === 'yes' || doSkills === 'y' || doSkills === '' ? 'Yes' : 'No');
+  openclawStep('Configure skills now? (optional)');
+  const doSkills = (await ttyQuestion('  Yes / No (default: No)', 'No')).trim().toLowerCase();
+  openclawStepValue(doSkills === 'yes' || doSkills === 'y' ? 'Yes' : 'No');
   console.log('│');
   let packageManager = 'npm';
-  if (doSkills === 'yes' || doSkills === 'y' || doSkills === '') {
+  if (doSkills === 'yes' || doSkills === 'y') {
     openclawStep('Preferred node manager for skill installs');
     const pmChoice = (await ttyQuestion('  npm / pnpm / yarn (default: npm)', 'npm')).trim().toLowerCase();
     packageManager = (pmChoice === 'pnpm' || pmChoice === 'yarn') ? pmChoice : 'npm';
@@ -570,6 +626,37 @@ async function cmdOnboard() {
         } catch (e) {
           console.log('  ⚠ Install in ' + path.relative(ROOT, dir) + ' failed: ' + (e.message || e));
         }
+      }
+    }
+    openclawStep('Install optional skills from ClawHub');
+    let hasClawhub = false;
+    try {
+      execSync('clawhub --version', { stdio: 'pipe' });
+      hasClawhub = true;
+    } catch (_) {}
+    if (!hasClawhub) {
+      openclawStepValue('Skip (clawhub not installed)');
+      console.log('  Install ClawHub first: ' + chalk.cyan('npm i -g clawhub'));
+      console.log('  Then: clawhub search "<topic>" and clawhub install <slug>');
+      console.log('  Optional slugs: ' + OPTIONAL_SKILLS.map(s => s.slug).join(', '));
+    } else {
+      console.log('  Optional skills (install with clawhub install <slug>):');
+      OPTIONAL_SKILLS.forEach((s, i) => console.log('    [' + (i + 1) + '] ' + s.slug + ' — ' + s.description));
+      const choice = (await ttyQuestion('  Numbers (e.g. 1 3 5), "all", or Enter to skip', '')).trim().toLowerCase();
+      if (choice && choice !== 'skip' && choice !== 'n' && choice !== 'no') {
+        const toInstall = choice === 'all'
+          ? OPTIONAL_SKILLS.map(s => s.slug)
+          : choice.split(/\s+/).map(n => OPTIONAL_SKILLS[parseInt(n, 10) - 1]).filter(Boolean).map(s => s.slug);
+        for (const slug of toInstall) {
+          try {
+            execSync('clawhub install ' + slug, { cwd: ROOT, stdio: 'inherit' });
+          } catch (e) {
+            console.log('  ⚠ clawhub install ' + slug + ' failed: ' + (e.message || e));
+          }
+        }
+        openclawStepValue(toInstall.length ? 'Installed: ' + toInstall.join(', ') : 'Skip');
+      } else {
+        openclawStepValue('Skip');
       }
     }
     console.log('│');
@@ -648,10 +735,24 @@ async function cmdOnboard() {
     }
   }
   if (hatch === '2') {
-    const { spawn } = require('child_process');
     const url = `http://localhost:${gatewayPort}`;
+    const openBrowser = () => {
+      const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+      try {
+        require('child_process').execSync(`${cmd} "${url}"`, { stdio: 'ignore' });
+      } catch (_) {}
+    };
+    try {
+      const res = await axios.get(url, { timeout: 2000, validateStatus: () => true });
+      if (res.status === 200) {
+        console.log('\n  Dashboard already running at ' + chalk.cyan(url));
+        console.log('  Opening browser...\n');
+        openBrowser();
+        return;
+      }
+    } catch (_) {}
     console.log('\n  Launching Web dashboard...\n');
-    const child = spawn(process.execPath, [path.join(ROOT, 'src', 'dashboard.js')], {
+    const child = require('child_process').spawn(process.execPath, [path.join(ROOT, 'src', 'dashboard.js')], {
       cwd: ROOT,
       stdio: [null, 'inherit', 'inherit'],
       env: { ...process.env, PORT: String(gatewayPort) }
@@ -660,12 +761,6 @@ async function cmdOnboard() {
       console.log('  Could not start dashboard:', err.message);
       console.log('  Run: aetherclaw dashboard\n');
     });
-    const openBrowser = () => {
-      const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
-      try {
-        require('child_process').execSync(`${cmd} "${url}"`, { stdio: 'ignore' });
-      } catch (_) {}
-    };
     setTimeout(() => {
       console.log('  Dashboard: ' + chalk.cyan(url));
       console.log('  Opening browser...');
@@ -775,6 +870,198 @@ function cmdIndex(fileArg) {
   }
 }
 
+function cmdPairingApprove(code) {
+  const c = (code || '').trim();
+  if (!c) {
+    console.error('Usage: aetherclaw pairing approve <code>');
+    process.exit(1);
+  }
+  const result = consumePendingByCode(ROOT, c);
+  if (!result) {
+    console.error('Invalid or expired code. Ask the bot for a new pairing code.');
+    process.exit(1);
+  }
+  const envPath = path.join(ROOT, '.env');
+  appendOrReplaceEnv(envPath, 'TELEGRAM_CHAT_ID', result.chatId);
+  process.env.TELEGRAM_CHAT_ID = result.chatId;
+  console.log('Pairing approved. Telegram chat ID saved to .env.');
+}
+
+async function cmdMessageSend(opts) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = opts.to === 'default' ? process.env.TELEGRAM_CHAT_ID : process.env.TELEGRAM_CHAT_ID;
+  const text = opts.message || '';
+  if (!token || !chatId) {
+    console.error('TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set (run onboard or telegram-setup).');
+    process.exit(1);
+  }
+  if (!text) {
+    console.error('Provide message with -m/--message.');
+    process.exit(1);
+  }
+  const ok = await sendTelegramMessage(token, chatId, text);
+  if (!ok) {
+    console.error('Failed to send message.');
+    process.exit(1);
+  }
+  console.log('Message sent.');
+}
+
+async function cmdHealth(opts) {
+  const configPath = path.join(ROOT, 'swarm_config.json');
+  const config = loadConfig(configPath);
+  const port = config.gateway?.port || process.env.PORT || 8501;
+  const url = `http://127.0.0.1:${port}`;
+  let status = 'ok';
+  let gateway = false;
+  try {
+    const res = await axios.get(url, { timeout: 3000, validateStatus: () => true });
+    gateway = res.status === 200;
+    if (res.status !== 200) status = 'warn';
+  } catch (e) {
+    status = 'error';
+  }
+  if (opts.json) {
+    console.log(JSON.stringify({ status, gateway, url }, null, 0));
+    return;
+  }
+  if (status === 'ok') {
+    console.log('Health: ok — gateway at ' + url);
+  } else if (status === 'warn') {
+    console.log('Health: warn — gateway responded with non-200 at ' + url);
+  } else {
+    console.log('Health: error — gateway unreachable at ' + url);
+  }
+  process.exitCode = status === 'ok' ? 0 : 1;
+}
+
+async function cmdConfigure(opts) {
+  const section = (opts.section || '').toLowerCase();
+  const configPath = path.join(ROOT, 'swarm_config.json');
+  let config = loadConfig(configPath);
+
+  const runApi = async () => {
+    let key = process.env.OPENROUTER_API_KEY;
+    if (!key) {
+      console.log('  Get your key at: https://openrouter.ai/keys\n');
+      key = await ttyQuestionMasked('  Enter OpenRouter API key: ');
+      if (key) {
+        const envPath = path.join(ROOT, '.env');
+        const line = `OPENROUTER_API_KEY=${key}\n`;
+        if (fs.existsSync(envPath)) {
+          let content = fs.readFileSync(envPath, 'utf8');
+          if (/OPENROUTER_API_KEY=/.test(content)) content = content.replace(/OPENROUTER_API_KEY=.*/m, `OPENROUTER_API_KEY=${key}`);
+          else content += '\n' + line;
+          fs.writeFileSync(envPath, content);
+        } else fs.writeFileSync(envPath, line);
+        process.env.OPENROUTER_API_KEY = key;
+        console.log('  API key saved to .env\n');
+      }
+    } else console.log('  API key already in environment.\n');
+  };
+
+  const runTelegram = async () => {
+    await setupTelegram(path.join(ROOT, '.env'), { question: ttyQuestion, questionMasked: ttyQuestionMasked });
+  };
+
+  const MODELS = {
+    '1': ['anthropic/claude-3.7-sonnet', '$3/$15/M'],
+    '2': ['anthropic/claude-opus-4.6', '$5/$25/M'],
+    '3': ['z-ai/glm-5', '$0.80/$2.56/M'],
+    '4': ['moonshotai/kimi-k2.5', '$0.45/$2.25/M'],
+    '5': ['minimax/minimax-m2.5', '$0.30/$1.20/M'],
+    '6': ['google/gemini-2.5-pro', 'varies'],
+    '7': ['openai/gpt-4.1', 'varies'],
+    '8': ['anthropic/claude-3.5-haiku', '$0.80/$4/M'],
+    '9': ['google/gemini-2.5-flash', 'varies'],
+    '0': ['deepseek/deepseek-chat-v4', 'budget'],
+    'A': ['minimax/minimax-m2-her', '$0.30/$1.20/M']
+  };
+  const runModel = async () => {
+    console.log('  Model selection');
+    console.log('  [1] Claude 3.7 Sonnet  [2] Opus 4.6  [3] GLM 5  [4] Kimi  [5] MiniMax  [6] Gemini Pro  [7] GPT-4.1');
+    console.log('  [8] Haiku  [9] Flash  [0] DeepSeek  [B] Custom\n');
+    let choice = (await ttyQuestion('  Select [1-0,B] (default: 1)', '1')).trim().toUpperCase();
+    let reasoningModel;
+    if (choice === 'B') {
+      reasoningModel = (await ttyQuestion('  Paste model ID', 'anthropic/claude-3.7-sonnet')).trim() || 'anthropic/claude-3.7-sonnet';
+    } else {
+      const info = MODELS[choice] || MODELS['1'];
+      reasoningModel = info[0];
+    }
+    let actionChoice = (await ttyQuestion('  Action model [8] Haiku [9] Flash [0] DeepSeek [Enter] Same: ', '')).trim().toUpperCase();
+    let actionModel = (actionChoice && MODELS[actionChoice]) ? MODELS[actionChoice][0] : reasoningModel;
+    if (actionChoice === 'B') actionModel = (await ttyQuestion('  Paste action model ID', reasoningModel)).trim() || reasoningModel;
+    config = loadConfig(configPath);
+    writeConfig(configPath, {
+      model_routing: {
+        ...config.model_routing,
+        tier_1_reasoning: { ...(config.model_routing?.tier_1_reasoning || {}), model: reasoningModel },
+        tier_2_action: { ...(config.model_routing?.tier_2_action || {}), model: actionModel }
+      }
+    });
+    console.log('  Model config saved.\n');
+  };
+
+  const runWeb = async () => {
+    console.log('  Web search uses Brave Search API (optional).');
+    const envPath = path.join(ROOT, '.env');
+    const current = process.env.BRAVE_API_KEY || '';
+    const key = (await ttyQuestion('  BRAVE_API_KEY (paste or Enter to skip)', current)).trim();
+    if (key) {
+      appendOrReplaceEnv(envPath, 'BRAVE_API_KEY', key);
+      process.env.BRAVE_API_KEY = key;
+      console.log('  BRAVE_API_KEY saved to .env\n');
+    } else console.log('  Skipped.\n');
+  };
+
+  const runGateway = async () => {
+    let gatewayPort = Number(config.gateway?.port || process.env.PORT || 8501);
+    let gatewayBind = config.gateway?.bind || 'loopback';
+    let gatewayAuthMode = config.gateway?.auth?.mode || 'token';
+    let gatewayToken = config.gateway?.auth?.token || process.env.AETHERCLAW_GATEWAY_TOKEN || '';
+    gatewayPort = Number((await ttyQuestion('  Gateway port', String(gatewayPort))).trim()) || 8501;
+    const bindChoice = (await ttyQuestion('  Bind: [1] Loopback [2] LAN (default: 1)', '1')).trim();
+    gatewayBind = bindChoice === '2' ? 'lan' : 'loopback';
+    const authChoice = (await ttyQuestion('  Auth: [1] Token [2] Password (default: 1)', '1')).trim();
+    gatewayAuthMode = authChoice === '2' ? 'password' : 'token';
+    if (gatewayAuthMode === 'token' && !gatewayToken) gatewayToken = randomToken();
+    let gatewayAuth;
+    if (gatewayAuthMode === 'password') {
+      const pwd = (await ttyQuestionMasked('  Gateway password: ')).trim();
+      gatewayAuth = { mode: 'password', password: pwd };
+    } else {
+      gatewayAuth = { mode: 'token', token: gatewayToken };
+    }
+    writeConfig(configPath, {
+      gateway: {
+        ...config.gateway,
+        port: gatewayPort,
+        bind: gatewayBind,
+        auth: gatewayAuth
+      }
+    });
+    console.log('  Gateway config saved.\n');
+  };
+
+  const sections = { api: runApi, telegram: runTelegram, model: runModel, web: runWeb, gateway: runGateway };
+  if (section) {
+    const fn = sections[section];
+    if (!fn) {
+      console.error('Unknown section. Use: api | telegram | model | web | gateway');
+      process.exit(1);
+    }
+    await fn();
+    return;
+  }
+  console.log('  Configure section: api | telegram | model | web | gateway');
+  console.log('  Example: aetherclaw configure --section api\n');
+  const choice = (await ttyQuestion('  Section to configure', 'api')).trim().toLowerCase();
+  const fn = sections[choice];
+  if (fn) await fn();
+  else console.log('  Unknown section. Run with --section <name>.\n');
+}
+
 async function cmdTui() {
   const config = loadConfig(path.join(ROOT, 'swarm_config.json'));
   const reasoningModel = config.model_routing?.tier_1_reasoning?.model || 'anthropic/claude-3.7-sonnet';
@@ -829,6 +1116,10 @@ async function cmdTui() {
     if (input === '/new' || input === '/reset') {
       const { clearSession } = require('./tools');
       clearSession(tuiSessionKey);
+      try {
+        const { runHooks } = require('./hooks');
+        runHooks(ROOT, 'on_session_reset', { sessionKey: tuiSessionKey });
+      } catch (_) {}
       console.log(chalk.dim('  Session reset. Next message starts fresh.\n'));
       continue;
     }
@@ -1203,6 +1494,33 @@ program
   .command('index [file]')
   .description('index brain files for memory search (optional: single file)')
   .action((file) => cmdIndex(file));
+
+program
+  .command('configure')
+  .description('re-run part of onboarding (API key, Telegram, model, web key, gateway)')
+  .option('-s, --section <name>', 'section only: api | telegram | model | web | gateway')
+  .action((opts) => cmdConfigure(opts));
+
+program
+  .command('message')
+  .description('Telegram messaging')
+  .command('send')
+  .description('send a message to Telegram (uses TELEGRAM_CHAT_ID)')
+  .option('-t, --to <target>', 'target (default: default)', 'default')
+  .option('-m, --message <text>', 'message text')
+  .action((opts) => cmdMessageSend(opts));
+
+program
+  .command('health')
+  .description('check gateway/dashboard reachability')
+  .action(() => cmdHealth(program.opts()));
+
+program
+  .command('pairing')
+  .description('Telegram pairing')
+  .command('approve <code>')
+  .description('approve a Telegram pairing by code (from DM)')
+  .action((code) => cmdPairingApprove(code));
 
 const configCmd = program.command('config').description('get or set config values (dot path)');
 configCmd

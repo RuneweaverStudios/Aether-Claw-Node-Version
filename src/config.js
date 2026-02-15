@@ -23,7 +23,9 @@ const DEFAULT_CONFIG = {
   brain: { directory: 'brain' },
   safety_gate: { enabled: true },
   heartbeat: { interval_minutes: 30 },
-  cron: { jobs: [] }
+  cron: { jobs: [] },
+  gateway: { port: 8501, bind: 'loopback', auth: { mode: 'token' } },
+  hooks: { on_session_reset: [] }
 };
 
 function loadConfig(configPath) {

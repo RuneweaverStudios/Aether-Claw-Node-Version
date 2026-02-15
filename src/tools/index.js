@@ -366,7 +366,7 @@ const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'sessions_send',
-      description: 'Send a message to another session. Stub in Aether-Claw.',
+      description: 'Send a message to another session. The message is appended to that session\'s history as a user message.',
       parameters: {
         type: 'object',
         properties: {
@@ -381,7 +381,7 @@ const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'sessions_spawn',
-      description: 'Spawn a sub-agent run. Stub in Aether-Claw.',
+      description: 'Spawn a sub-agent run: execute the given task in a fresh context and return the reply.',
       parameters: {
         type: 'object',
         properties: {
@@ -964,12 +964,29 @@ function runSessionStatus(workspaceRoot, args) {
   };
 }
 
-function runSessionsSendStub() {
-  return { error: 'sessions_send not implemented in Aether-Claw (no cross-session delivery).' };
+function runSessionsSend(args) {
+  const key = args.session_key || SESSION_MAIN;
+  const msg = args.message || '';
+  if (!msg) return { error: 'message is required' };
+  pushSessionMessage(key, 'user', msg);
+  return { sent: true, session_key: key };
 }
 
-function runSessionsSpawnStub() {
-  return { error: 'sessions_spawn not implemented in Aether-Claw (no sub-agent runner).' };
+async function runSessionsSpawn(workspaceRoot, args, context) {
+  const task = args.task || '';
+  if (!task) return { error: 'task is required' };
+  const root = workspaceRoot || ROOT_DEFAULT;
+  try {
+    const { buildSystemPromptForRun } = require('../gateway');
+    const { runAgentLoop } = require('../agent-loop');
+    const config = loadConfig(configPath(root));
+    const systemPrompt = buildSystemPromptForRun(root);
+    const result = await runAgentLoop(root, task, systemPrompt, config, { conversationHistory: [], maxIterations: 10 });
+    if (result.error && !result.reply) return { error: result.error };
+    return { reply: result.reply || '', tool_calls_count: result.toolCallsCount };
+  } catch (e) {
+    return { error: e.message || 'sessions_spawn failed' };
+  }
 }
 
 function runAgentsList() {
@@ -1589,9 +1606,9 @@ async function runTool(workspaceRoot, toolName, args, context = {}) {
     case 'session_status':
       return runSessionStatus(root, args);
     case 'sessions_send':
-      return runSessionsSendStub();
+      return runSessionsSend(args);
     case 'sessions_spawn':
-      return runSessionsSpawnStub();
+      return await runSessionsSpawn(root, args, ctx);
     case 'agents_list':
       return runAgentsList();
     case 'image':
