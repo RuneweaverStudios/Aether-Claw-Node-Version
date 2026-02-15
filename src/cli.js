@@ -329,7 +329,7 @@ async function cmdOnboard() {
     aetherclawBox('Existing config', [
       'workspace: ' + wsDir,
       'model: ' + reasoning,
-      'gateway.port: ' + (config.gateway?.port || process.env.PORT || '8501')
+      'gateway.port: ' + (config.gateway?.port || process.env.PORT || '18789')
     ]);
     console.log('');
     const handling = (await ttyQuestion('  [1] Use existing  [2] Update values  [3] Reset (default: 2)', '2')).trim();
@@ -472,12 +472,12 @@ async function cmdOnboard() {
   aetherclawBox('Model configured', ['Default model set to ' + reasoningModel]);
   console.log('');
 
-  let gatewayPort = Number(config.gateway?.port || process.env.PORT || 8501);
+  let gatewayPort = Number(config.gateway?.port || process.env.PORT || 18789);
   let gatewayBind = config.gateway?.bind || 'loopback';
   let gatewayAuthMode = config.gateway?.auth?.mode || 'token';
   let gatewayToken = config.gateway?.auth?.token || process.env.AETHERCLAW_GATEWAY_TOKEN || '';
   if (flow === 'manual') {
-    gatewayPort = Number((await ttyQuestion('  Gateway port', String(gatewayPort))).trim() || gatewayPort) || 8501;
+    gatewayPort = Number((await ttyQuestion('  Gateway port (WS + optional HTTP)', String(gatewayPort))).trim() || gatewayPort) || 18789;
     const bindChoice = (await ttyQuestion('  Gateway bind: [1] Loopback  [2] LAN  [3] Custom (default: 1)', '1')).trim();
     gatewayBind = bindChoice === '2' ? 'lan' : bindChoice === '3' ? 'custom' : 'loopback';
     const authChoice = (await ttyQuestion('  Gateway auth: [1] Token  [2] Password (default: 1)', '1')).trim();
@@ -505,7 +505,7 @@ async function cmdOnboard() {
     }
   });
   aetherclawStep('Gateway');
-  aetherclawStepValue('port ' + gatewayPort + ', bind ' + gatewayBind + ', auth ' + gatewayAuthMode);
+  aetherclawStepValue('port ' + gatewayPort + ' (WS + optional HTTP), bind ' + gatewayBind + ', auth ' + gatewayAuthMode);
   console.log('');
 
   renderProgress(3, ONBOARD_STEPS_TOTAL, 'Brain');
@@ -672,6 +672,10 @@ async function cmdOnboard() {
 
   renderProgress(5, ONBOARD_STEPS_TOTAL, 'Gateway');
   openclawStep('Install Gateway service (recommended)');
+  openclawBox('Gateway', openclawWrap(
+    'The daemon runs the WebSocket gateway (control plane for macOS app and CLI) plus optional HTTP dashboard on the same port.'
+  ));
+  console.log('│');
   const doGateway = (await ttyQuestion('  Yes / No (default: Yes)', 'Yes')).trim().toLowerCase();
   openclawStepValue(doGateway === 'yes' || doGateway === 'y' || doGateway === '' ? 'Yes' : 'No');
   console.log('│');
@@ -699,7 +703,8 @@ async function cmdOnboard() {
     'Telegram: ' + (process.env.TELEGRAM_BOT_TOKEN ? 'ok' : 'not configured'),
     'Agents: main (default)',
     'Heartbeat interval: 30m (main)',
-    'Web dashboard: http://127.0.0.1:' + port + '/'
+    'Web dashboard: http://127.0.0.1:' + port + '/',
+    'WebSocket: ws://127.0.0.1:' + port + ' (macOS app and CLI clients connect here)'
   ]);
   console.log('│');
   openclawStep('Optional apps');
@@ -713,7 +718,8 @@ async function cmdOnboard() {
   openclawStep('Control UI');
   openclawBox('Control UI', [
     'Web UI: http://127.0.0.1:' + port + '/',
-    'Gateway: reachable',
+    'WebSocket: ws://127.0.0.1:' + port,
+    'Gateway: reachable (daemon serves WS + HTTP on same port)',
     'Open the dashboard anytime: aetherclaw dashboard'
   ]);
   console.log('│');
@@ -910,7 +916,7 @@ async function cmdMessageSend(opts) {
 async function cmdHealth(opts) {
   const configPath = path.join(ROOT, 'swarm_config.json');
   const config = loadConfig(configPath);
-  const port = config.gateway?.port || process.env.PORT || 8501;
+  const port = config.gateway?.port || process.env.PORT || 18789;
   const url = `http://127.0.0.1:${port}`;
   let status = 'ok';
   let gateway = false;
@@ -1016,11 +1022,11 @@ async function cmdConfigure(opts) {
   };
 
   const runGateway = async () => {
-    let gatewayPort = Number(config.gateway?.port || process.env.PORT || 8501);
+    let gatewayPort = Number(config.gateway?.port || process.env.PORT || 18789);
     let gatewayBind = config.gateway?.bind || 'loopback';
     let gatewayAuthMode = config.gateway?.auth?.mode || 'token';
     let gatewayToken = config.gateway?.auth?.token || process.env.AETHERCLAW_GATEWAY_TOKEN || '';
-    gatewayPort = Number((await ttyQuestion('  Gateway port', String(gatewayPort))).trim()) || 8501;
+    gatewayPort = Number((await ttyQuestion('  Gateway port', String(gatewayPort))).trim()) || 18789;
     const bindChoice = (await ttyQuestion('  Bind: [1] Loopback [2] LAN (default: 1)', '1')).trim();
     gatewayBind = bindChoice === '2' ? 'lan' : 'loopback';
     const authChoice = (await ttyQuestion('  Auth: [1] Token [2] Password (default: 1)', '1')).trim();
@@ -1464,7 +1470,10 @@ program
 program
   .command('dashboard')
   .description('web dashboard (Chat, Status, Config)')
-  .action(() => require('./dashboard'));
+  .action(() => {
+    const dash = require('./dashboard');
+    dash.startStandaloneServer();
+  });
 
 program
   .command('doctor')

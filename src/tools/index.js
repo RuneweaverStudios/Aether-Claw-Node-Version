@@ -263,12 +263,16 @@ const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'nodes',
-      description: 'Paired nodes (status, notify, run, camera). In Aether-Claw this is a stub; requires OpenClaw node pairing.',
+      description: 'Paired nodes connected to the gateway: list connected nodes, or invoke a command on a node (system.run, system.notify, canvas.*). Use action "list" to get node IDs; use action "invoke" with node_id, command, and params to run on a node.',
       parameters: {
         type: 'object',
         properties: {
-          action: { type: 'string', description: 'status|describe|notify|run' }
-        }
+          action: { type: 'string', enum: ['list', 'invoke'], description: 'list = list connected nodes; invoke = run command on node' },
+          node_id: { type: 'string', description: 'Node ID (from list). Required for invoke.' },
+          command: { type: 'string', description: 'Command name, e.g. system.run, system.notify, canvas.navigate. Required for invoke.' },
+          params: { type: 'object', description: 'Command parameters (e.g. { command: "echo hi" } for system.run, { title, body } for system.notify)' }
+        },
+        required: ['action']
       }
     }
   },
@@ -833,8 +837,27 @@ async function runCanvas(workspaceRoot, args) {
   return { error: 'Unknown canvas action: ' + action };
 }
 
-function runNodesStub() {
-  return { error: 'Nodes tool requires OpenClaw node pairing; not implemented in Aether-Claw.' };
+async function runNodes(root, args) {
+  const nodeRegistry = require('../node-registry');
+  if (args.action === 'list') {
+    const list = nodeRegistry.listNodes();
+    if (list.length === 0) return { nodes: [], message: 'No nodes connected. Start a node client (e.g. macOS app) that connects with role "node".' };
+    return { nodes: list };
+  }
+  if (args.action === 'invoke') {
+    const nodeId = args.node_id;
+    const command = args.command;
+    const params = args.params || {};
+    if (!nodeId || !command) return { error: 'node_id and command required for action invoke' };
+    try {
+      const result = await nodeRegistry.invokeNode(nodeId, command, params);
+      if (result.ok) return { ok: true, result: result.result };
+      return { error: result.error || 'Node returned error' };
+    } catch (e) {
+      return { error: e.message || String(e) };
+    }
+  }
+  return { error: 'Use action "list" or "invoke"' };
 }
 
 async function runMessage(workspaceRoot, args) {
@@ -1670,7 +1693,7 @@ async function runTool(workspaceRoot, toolName, args, context = {}) {
     case 'canvas':
       return await runCanvas(root, args);
     case 'nodes':
-      return runNodesStub();
+      return await runNodes(root, args);
     case 'message':
       return await runMessage(root, args);
     case 'cron':

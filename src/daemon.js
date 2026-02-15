@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
  * Aether-Claw Node gateway daemon.
- * Long-lived process: heartbeat tasks (memory index, etc.) on an interval + Telegram bot.
+ * Long-lived process: WebSocket gateway (control plane) + optional HTTP dashboard + heartbeat + Telegram bot.
  * Used by macOS LaunchAgent (com.aetherclaw.heartbeat); no Python required.
  */
 
 const path = require('path');
+const http = require('http');
 const fs = require('fs');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
@@ -16,9 +17,23 @@ const { sendTelegramMessage, sendChatAction } = require('./telegram-setup');
 const { isFirstRun, getBootstrapFirstMessage } = require('./personality');
 const { createReplyDispatcher, resolveSessionKey } = require('./gateway');
 const { addPending } = require('./pairing');
+const { createWsGateway } = require('./ws-gateway');
+const { createDashboardRequestHandler } = require('./dashboard');
 
 const ROOT = path.resolve(__dirname, '..');
 const TELEGRAM_API = 'https://api.telegram.org/bot';
+
+function getGatewayConfig() {
+  try {
+    const config = loadConfig(path.join(ROOT, 'swarm_config.json'));
+    const port = Number(config.gateway?.port) || 18789;
+    const bind = config.gateway?.bind === 'loopback' || config.gateway?.bind === '127.0.0.1' ? '127.0.0.1' : (config.gateway?.bind || '127.0.0.1');
+    const dashboard = config.gateway?.dashboard !== false;
+    return { port, host: bind, dashboard };
+  } catch (e) {
+    return { port: 18789, host: '127.0.0.1', dashboard: true };
+  }
+}
 
 function getHeartbeatIntervalMs() {
   try {
@@ -125,7 +140,42 @@ async function runTelegramLoop() {
 
 async function main() {
   const intervalMs = getHeartbeatIntervalMs();
-  log('Gateway daemon starting (Node), heartbeat every ' + (intervalMs / 60000) + ' min');
+  const gwConfig = getGatewayConfig();
+  log('Gateway daemon starting (Node), WS gateway on ' + gwConfig.host + ':' + gwConfig.port + ', heartbeat every ' + (intervalMs / 60000) + ' min');
+
+  let httpServer;
+  if (gwConfig.dashboard) {
+    httpServer = http.createServer(createDashboardRequestHandler());
+  } else {
+    httpServer = http.createServer((req, res) => {
+      if (req.url === '/' && req.method === 'GET') {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ gateway: 'aether-claw', ok: true }));
+      } else {
+        res.statusCode = 404;
+        res.end('Not found');
+      }
+    });
+  }
+
+  const gateway = createWsGateway({
+    httpServer,
+    workspaceRoot: ROOT,
+    port: gwConfig.port,
+    host: gwConfig.host,
+    dashboard: false
+  });
+  gateway.listen();
+  httpServer.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      log('Port ' + gwConfig.port + ' in use. Stop the other process or set gateway.port in swarm_config.json.');
+      process.exit(1);
+    }
+    throw err;
+  });
+  httpServer.listen(gwConfig.port, gwConfig.host, () => {
+    log('WebSocket gateway listening on ws://' + gwConfig.host + ':' + gwConfig.port + (gwConfig.dashboard ? ' (dashboard on same port)' : ''));
+  });
 
   runHeartbeatTasks();
   setInterval(runHeartbeatTasks, intervalMs);

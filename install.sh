@@ -207,8 +207,8 @@ gateway_prompt() {
     return 0
   fi
   GW_DID_ACTION=0
-  printf "${CYAN}🚪 Gateway daemon${NC} (Node: heartbeat + Telegram bot)\n"
-  printf "  Memory index every 30 min; Telegram replies when configured\n\n"
+  printf "${CYAN}🚪 Gateway daemon${NC} (Node: WebSocket gateway + optional HTTP dashboard, heartbeat, Telegram bot)\n"
+  printf "  WS control plane for macOS app and CLI; memory index every 30 min; Telegram when configured\n\n"
   if [ -f "$PLIST" ]; then
     LOADED=false
     launchctl list 2>/dev/null | grep -q "com.aetherclaw.heartbeat" && LOADED=true

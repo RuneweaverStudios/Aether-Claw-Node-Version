@@ -29,7 +29,7 @@ const DEFAULT_CONFIG = {
   safety_gate: { enabled: true },
   heartbeat: { interval_minutes: 30 },
   cron: { jobs: [] },
-  gateway: { port: 8501, bind: 'loopback', auth: { mode: 'token' } },
+  gateway: { port: 18789, bind: '127.0.0.1', auth: { mode: 'token' }, dashboard: true },
   hooks: { on_session_reset: [] }
 };
 

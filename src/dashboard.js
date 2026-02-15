@@ -339,62 +339,80 @@ const HTML = `<!DOCTYPE html>
 </html>
 `;
 
-const server = http.createServer(async (req, res) => {
-  const url = req.url?.split('?')[0];
-  const setJson = () => {
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-  };
-  const setHtml = () => {
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  };
+/**
+ * Create the HTTP request handler for the dashboard (status, config, security, chat, HTML).
+ * Used by standalone dashboard server and by daemon when serving dashboard on gateway port.
+ */
+function createDashboardRequestHandler() {
+  return async (req, res) => {
+    const url = req.url?.split('?')[0];
+    const setJson = () => {
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    };
+    const setHtml = () => {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    };
 
-  if (url === '/status' || url === '/status/') {
-    setJson();
-    res.end(JSON.stringify(getSystemStatus()));
-    return;
-  }
-  if (url === '/api/config') {
-    setJson();
-    res.end(JSON.stringify(getConfigForUI()));
-    return;
-  }
-  if (url === '/api/security' || url === '/api/security/') {
-    setJson();
-    res.end(JSON.stringify(getSecurityData()));
-    return;
-  }
-  if (url === '/api/chat' && req.method === 'POST') {
-    let body = '';
-    try {
-      body = await readBody(req);
-      const { message } = JSON.parse(body || '{}');
-      const result = await handleChatMessage(message);
+    if (url === '/status' || url === '/status/') {
       setJson();
-      res.end(JSON.stringify(result));
-    } catch (e) {
-      setJson();
-      res.statusCode = 400;
-      res.end(JSON.stringify({ error: e.message || 'Invalid request' }));
+      res.end(JSON.stringify(getSystemStatus()));
+      return;
     }
-    return;
-  }
-  if (url === '/' || url === '/index.html') {
-    setHtml();
-    res.end(HTML);
-    return;
-  }
-  res.statusCode = 404;
-  res.end('Not found');
-});
+    if (url === '/api/config') {
+      setJson();
+      res.end(JSON.stringify(getConfigForUI()));
+      return;
+    }
+    if (url === '/api/security' || url === '/api/security/') {
+      setJson();
+      res.end(JSON.stringify(getSecurityData()));
+      return;
+    }
+    if (url === '/api/chat' && req.method === 'POST') {
+      let body = '';
+      try {
+        body = await readBody(req);
+        const { message } = JSON.parse(body || '{}');
+        const result = await handleChatMessage(message);
+        setJson();
+        res.end(JSON.stringify(result));
+      } catch (e) {
+        setJson();
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: e.message || 'Invalid request' }));
+      }
+      return;
+    }
+    if (url === '/' || url === '/index.html') {
+      setHtml();
+      res.end(HTML);
+      return;
+    }
+    res.statusCode = 404;
+    res.end('Not found');
+  };
+}
 
-const port = Number(process.env.PORT) || 8501;
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`Port ${port} is already in use. Dashboard may already be running.`);
-    console.error(`Open http://localhost:${port} in your browser.`);
-    process.exit(0);
-  }
-  throw err;
-});
-server.listen(port, () => console.log(`Dashboard: http://localhost:${port}`));
+const server = http.createServer(createDashboardRequestHandler());
+
+function startStandaloneServer(port) {
+  const p = port != null ? Number(port) : (Number(process.env.PORT) || 18789);
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`Port ${p} is already in use. Dashboard may already be running.`);
+      console.error(`Open http://localhost:${p} in your browser.`);
+      process.exit(0);
+    }
+    throw err;
+  });
+  server.listen(p, () => console.log(`Dashboard: http://localhost:${p}`));
+}
+
+module.exports = {
+  getSystemStatus,
+  getConfigForUI,
+  getSecurityData,
+  createDashboardRequestHandler,
+  startStandaloneServer
+};
