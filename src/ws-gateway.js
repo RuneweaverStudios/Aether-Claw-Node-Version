@@ -9,8 +9,8 @@ const http = require('http');
 const { WebSocketServer } = require('ws');
 const { loadConfig } = require('./config');
 const { createReplyDispatcher, resolveSessionKey, buildSystemPromptForRun, buildWorkspaceSkillSnapshot } = require('./gateway');
-const { runAgentLoop } = require('./agent-loop');
-const { getSessionHistory, pushSessionMessage } = require('./tools');
+const { runAgentLoop, runAgentLoopStream } = require('./agent-loop');
+const { getSessionHistory, pushSessionMessage, setSessionHistory } = require('./tools');
 const { classifyComplexity, tierFromScore } = require('./complexity');
 const nodeRegistry = require('./node-registry');
 
@@ -19,6 +19,8 @@ const PROTOCOL_VERSION = 3;
 
 /** @type {Map<string, { role: string, scopes?: string[], connectedAt: number }>} */
 const connections = new Map();
+/** @type {Map<string, boolean>} sessionKey -> run in progress (for server-side queue) */
+const runsInProgress = new Map();
 let connectionIdSeq = 0;
 let tickIntervalMs = 15000;
 
@@ -206,47 +208,108 @@ function createWsGateway(opts = {}) {
           sendRes(ws, msg.id, true, { messages: history });
           break;
         }
+        case 'chat.export': {
+          const sessionKey = params.sessionKey || 'web';
+          const limit = Math.min(500, Math.max(1, Number(params.limit) || 100));
+          const messages = getSessionHistory(sessionKey, limit).map((m) => ({
+            role: m.role,
+            content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+          }));
+          sendRes(ws, msg.id, true, { sessionKey, messages, exportedAt: new Date().toISOString() });
+          break;
+        }
+        case 'chat.replace': {
+          const sessionKey = params.sessionKey || 'web';
+          const messages = params.messages;
+          if (!Array.isArray(messages)) {
+            sendRes(ws, msg.id, false, { error: 'messages array required' });
+            break;
+          }
+          setSessionHistory(sessionKey, messages);
+          sendRes(ws, msg.id, true, { sessionKey, replaced: messages.length });
+          break;
+        }
         case 'agent': {
           const text = (params.message || params.body || '').trim();
           const sessionKey = params.sessionKey || 'web';
           const runId = params.idempotencyKey || 'run_' + Date.now();
+          const wantStream = params.stream === true;
+          const readOnly = params.readOnly === true || params.mode === 'plan';
           if (!text) {
             sendRes(ws, msg.id, false, { error: 'Empty message' });
             break;
           }
+          if (runsInProgress.get(sessionKey)) {
+            sendRes(ws, msg.id, false, { ok: false, busy: true });
+            break;
+          }
+          runsInProgress.set(sessionKey, true);
           sendRes(ws, msg.id, true, { runId, status: 'accepted' });
+          const emitIdle = () => {
+            runsInProgress.delete(sessionKey);
+            sendEvent(ws, 'agent.idle', { sessionKey });
+          };
           try {
             const skillsSnapshot = buildWorkspaceSkillSnapshot(workspaceRoot);
-            const systemPrompt = buildSystemPromptForRun(workspaceRoot, { skillsSnapshot });
+            const systemPrompt = buildSystemPromptForRun(workspaceRoot, { skillsSnapshot, readOnly });
             const conversationHistory = getSessionHistory(sessionKey, 20).map((m) => ({
               role: m.role,
               content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
             }));
-            let tier = 'action';
-            try {
-              const score = await classifyComplexity(text, config);
-              tier = tierFromScore(score, config);
-            } catch (_) {}
-            const result = await runAgentLoop(workspaceRoot, text, systemPrompt, config, {
-              tier,
-              max_tokens: 4096,
-              conversationHistory
-            });
-            pushSessionMessage(sessionKey, 'user', text);
-            pushSessionMessage(sessionKey, 'assistant', result.reply || result.error || '');
-            sendEvent(ws, 'agent', {
-              runId,
-              status: 'completed',
-              reply: result.reply || '',
-              error: result.error,
-              modelUsed: result.modelUsed
-            });
+            let tier = readOnly ? 'reasoning' : 'action';
+            if (!readOnly) {
+              try {
+                const score = await classifyComplexity(text, config);
+                tier = tierFromScore(score, config);
+              } catch (_) {}
+            }
+
+            if (wantStream) {
+              const result = await runAgentLoopStream(workspaceRoot, text, systemPrompt, config, {
+                tier,
+                max_tokens: 4096,
+                conversationHistory,
+                readOnly,
+                onChunk: (delta) => sendEvent(ws, 'agent.chunk', { runId, delta }),
+                onStep: (step) => sendEvent(ws, 'agent.step', { runId, step })
+              });
+              pushSessionMessage(sessionKey, 'user', text);
+              pushSessionMessage(sessionKey, 'assistant', result.reply || result.error || '');
+              sendEvent(ws, 'agent', {
+                runId,
+                status: 'completed',
+                reply: result.reply || '',
+                error: result.error,
+                modelUsed: result.modelUsed,
+                usage: result.usage
+              });
+              emitIdle();
+            } else {
+              const result = await runAgentLoop(workspaceRoot, text, systemPrompt, config, {
+                tier,
+                max_tokens: 4096,
+                conversationHistory,
+                readOnly
+              });
+              pushSessionMessage(sessionKey, 'user', text);
+              pushSessionMessage(sessionKey, 'assistant', result.reply || result.error || '');
+              sendEvent(ws, 'agent', {
+                runId,
+                status: 'completed',
+                reply: result.reply || '',
+                error: result.error,
+                modelUsed: result.modelUsed,
+                usage: result.usage
+              });
+              emitIdle();
+            }
           } catch (e) {
             sendEvent(ws, 'agent', {
               runId,
               status: 'failed',
               error: e.message || String(e)
             });
+            emitIdle();
           }
           break;
         }

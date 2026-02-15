@@ -16,6 +16,14 @@ const { send: notifySend } = require('../notifier');
 
 const ROOT_DEFAULT = path.resolve(__dirname, '..', '..');
 
+/** Tools allowed in read-only (plan) mode; all others are denied. */
+const READ_ONLY_ALLOWED = new Set([
+  'read_file', 'memory_search', 'memory_get', 'web_search', 'web_fetch',
+  'list_dir', 'file_exists', 'git_status', 'git_diff', 'git_log',
+  'datetime', 'doctor', 'gateway', 'sessions_list', 'sessions_history', 'session_status', 'agents_list',
+  'nodes', 'browser', 'http_request', 'json_read', 'glob_search', 'env_get', 'audit_tail'
+]);
+
 // In-memory background exec sessions (per-agent key could be passed later)
 const backgroundSessions = new Map();
 let sessionIdCounter = 0;
@@ -975,6 +983,16 @@ function clearSession(sessionKey) {
   sessionStore.set(sessionKey, []);
 }
 
+/** Replace session history with a given list of { role, content } (for chat.load / import). */
+function setSessionHistory(sessionKey, messages) {
+  const list = (messages || []).map((m) => ({
+    role: m.role,
+    content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+    at: new Date().toISOString()
+  }));
+  sessionStore.set(sessionKey, list);
+}
+
 function runSessionsList(args) {
   const limit = Math.min(50, args.limit || 20);
   const keys = Array.from(sessionStore.keys());
@@ -1661,6 +1679,9 @@ function runGithubConnect(workspaceRoot, args) {
 async function runTool(workspaceRoot, toolName, args, context = {}) {
   const root = workspaceRoot || ROOT_DEFAULT;
   const ctx = context;
+  if (ctx.readOnly && !READ_ONLY_ALLOWED.has(toolName)) {
+    return { error: 'Read-only (plan) mode: this tool is not allowed. Use only read-only tools (read_file, memory_search, web_fetch, etc.).' };
+  }
 
   switch (toolName) {
     case 'exec':
@@ -1781,6 +1802,7 @@ module.exports = {
   runMemorySearch,
   pushSessionMessage,
   getSessionHistory,
+  setSessionHistory,
   clearSession,
   SESSION_MAIN
 };

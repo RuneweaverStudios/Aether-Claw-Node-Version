@@ -34,7 +34,7 @@ Other .md files in brain/ (e.g. BOOTSTRAP.md, audit_log.md) may exist; use read_
 /**
  * Build the full system prompt for a run: base + bootstrap context + skills section.
  * @param {string} workspaceRoot
- * @param {{ skillsSnapshot?: { prompt: string } }} opts - Optional pre-built skills snapshot
+ * @param {{ skillsSnapshot?: { prompt: string }, readOnly?: boolean }} opts - Optional pre-built skills snapshot; readOnly = plan mode
  */
 function buildSystemPromptForRun(workspaceRoot, opts = {}) {
   const root = workspaceRoot || ROOT_DEFAULT;
@@ -42,6 +42,9 @@ function buildSystemPromptForRun(workspaceRoot, opts = {}) {
   if (isFirstRun(root)) system += getBootstrapContext(root);
   const snapshot = opts.skillsSnapshot || buildWorkspaceSkillSnapshot(root);
   if (snapshot.prompt) system += '\n\n## Skills\n\n' + snapshot.prompt;
+  if (opts.readOnly) {
+    system += '\n\nYou are in read-only (plan) mode. Use only read_file, memory_search, memory_get, web_search, web_fetch, list_dir, file_exists, git_status, git_diff, git_log, datetime, gateway/sessions/agents for reading. Do not use exec, write_file, edit, apply_patch, create_directory, or any other write/exec tools.';
+  }
   return system;
 }
 

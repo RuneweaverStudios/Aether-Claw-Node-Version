@@ -13,6 +13,13 @@
       "temperature": 0.5
     }
   },
-  "safety_gate": { "enabled": true },
-  "brain": { "directory": "brain" }
+  "safety_gate": {
+    "enabled": true
+  },
+  "brain": {
+    "directory": "brain"
+  },
+  "gateway": {
+    "port": 18790
+  }
 }
